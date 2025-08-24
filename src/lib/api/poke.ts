@@ -25,8 +25,9 @@ const PokeDetails = z.object({
   }))
 });
 
-export async function listPokemon(offset = 0, limit = 24) {
-  const r = await fetch(`https://pokeapi.co/api/v2/pokemon?limit=${limit}&offset=${offset}`);
+export async function listPokemon() {
+  // Fetch all Pokemon at once - there are approximately 1000+ Pokemon in the PokeAPI so there is no performance penalty for fetching all at once
+  const r = await fetch(`https://pokeapi.co/api/v2/pokemon`);
   if (!r.ok) throw new Error(`Failed to fetch Pokemon list: ${r.status}`);
   const j = await r.json();
   return PokeList.parse(j);
@@ -36,6 +37,20 @@ export async function listPokemon(offset = 0, limit = 24) {
 export function filterPokemonByName(results: { name: string; url: string }[], query: string) {
   if (!query.trim()) return results;
   return results.filter(p => p.name.toLowerCase().includes(query.toLowerCase()));
+}
+
+// Client-side pagination helper
+export function paginateResults<T>(items: T[], page: number, itemsPerPage: number) {
+  const startIndex = page * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  return {
+    items: items.slice(startIndex, endIndex),
+    totalItems: items.length,
+    totalPages: Math.ceil(items.length / itemsPerPage),
+    currentPage: page,
+    hasNextPage: endIndex < items.length,
+    hasPreviousPage: page > 0
+  };
 }
 
 export async function getPokemon(name: string): Promise<Pokemon> {

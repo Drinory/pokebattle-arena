@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listPokemon, getPokemon, filterPokemonByName, mockPokemon } from "@/lib/api/poke";
+import { listPokemon, getPokemon, filterPokemonByName, paginateResults, mockPokemon } from "@/lib/api/poke";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,45 +18,55 @@ type PokemonListProps = {
 };
 
 export default function PokemonList({ onPick, selectedLeft, selectedRight }: PokemonListProps) {
-  const [items, setItems] = useState<{ name: string; url: string }[]>([]);
+  const [allItems, setAllItems] = useState<{ name: string; url: string }[]>([]);
   const [filteredItems, setFilteredItems] = useState<{ name: string; url: string }[]>([]);
+  const [paginatedItems, setPaginatedItems] = useState<{ name: string; url: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [offset, setOffset] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
   const [loadingPokemon, setLoadingPokemon] = useState<string | null>(null);
   const [useMockMode, setUseMockMode] = useState(false);
 
-  const limit = 24;
+  const itemsPerPage = 24;
 
-  // Load Pokemon list
+  // Load ALL Pokemon list once
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
         setError(null);
         
-        const res = await listPokemon(offset, limit);
-        setItems(res.results);
-        setTotal(res.count);
+        const res = await listPokemon();
+        setAllItems(res.results);
         setUseMockMode(false);
       } catch (err) {
         console.warn("PokéAPI failed, falling back to mock mode:", err);
         setError("API unavailable - using demo Pokémon");
-        setItems(mockPokemon.map(p => ({ name: p.name, url: "" })));
-        setTotal(3);
+        setAllItems(mockPokemon.map(p => ({ name: p.name, url: "" })));
         setUseMockMode(true);
       } finally {
         setLoading(false);
       }
     })();
-  }, [offset]);
+  }, []); // Only run once on mount
 
-  // Filter items based on search
+  // Filter items based on search and reset to first page
   useEffect(() => {
-    setFilteredItems(filterPokemonByName(items, searchQuery));
-  }, [items, searchQuery]);
+    const filtered = filterPokemonByName(allItems, searchQuery);
+    setFilteredItems(filtered);
+    setCurrentPage(0); // Reset to first page when search changes
+  }, [allItems, searchQuery]);
+
+  // Apply pagination to filtered results
+  useEffect(() => {
+    const paginated = paginateResults(filteredItems, currentPage, itemsPerPage);
+    setPaginatedItems(paginated.items);
+    setTotalPages(paginated.totalPages);
+    setTotalItems(paginated.totalItems);
+  }, [filteredItems, currentPage]);
 
   const handleSelectPokemon = async (name: string, slot: "left" | "right") => {
     try {
@@ -80,8 +90,8 @@ export default function PokemonList({ onPick, selectedLeft, selectedRight }: Pok
     }
   };
 
-  const canGoPrevious = offset > 0;
-  const canGoNext = offset + limit < total;
+  const canGoPrevious = currentPage > 0;
+  const canGoNext = currentPage < totalPages - 1;
 
   if (loading) {
     return (
@@ -130,7 +140,7 @@ export default function PokemonList({ onPick, selectedLeft, selectedRight }: Pok
       </div>
 
       {/* Pokemon Grid */}
-      {filteredItems.length === 0 ? (
+      {paginatedItems.length === 0 ? (
         <Alert>
           <AlertDescription>
             {searchQuery ? `No Pokémon found matching "${searchQuery}"` : "No Pokémon available"}
@@ -138,7 +148,7 @@ export default function PokemonList({ onPick, selectedLeft, selectedRight }: Pok
         </Alert>
       ) : (
         <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto">
-          {filteredItems.map((pokemon) => {
+          {paginatedItems.map((pokemon) => {
             const isSelected = selectedLeft?.name === pokemon.name || selectedRight?.name === pokemon.name;
             const isLoading = loadingPokemon === pokemon.name;
             
@@ -174,26 +184,30 @@ export default function PokemonList({ onPick, selectedLeft, selectedRight }: Pok
       )}
 
       {/* Pagination */}
-      {!useMockMode && !searchQuery && (
+      {!useMockMode && totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <div>
-            Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}
+            Showing {currentPage * itemsPerPage + 1}-{Math.min((currentPage + 1) * itemsPerPage, totalItems)} of {totalItems}
+            {searchQuery && ` (filtered from ${allItems.length})`}
           </div>
           <div className="flex gap-2">
             <Button
               size="sm"
               variant="outline"
               disabled={!canGoPrevious}
-              onClick={() => setOffset(Math.max(0, offset - limit))}
+              onClick={() => setCurrentPage(currentPage - 1)}
             >
               <ChevronLeft className="h-4 w-4" />
               Previous
             </Button>
+            <span className="flex items-center px-2 text-xs">
+              Page {currentPage + 1} of {totalPages}
+            </span>
             <Button
               size="sm"
               variant="outline"
               disabled={!canGoNext}
-              onClick={() => setOffset(offset + limit)}
+              onClick={() => setCurrentPage(currentPage + 1)}
             >
               Next
               <ChevronRight className="h-4 w-4" />
