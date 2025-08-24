@@ -20,6 +20,12 @@ export default function PokeBattleArena() {
     setTimeout(() => setWinner(winnerSide), 1000)
   };
 
+  const handleRestart = () => {
+    setSelectedLeft(undefined);
+    setSelectedRight(undefined);
+    setWinner(undefined);
+  };
+
   const handlePokemonSelect = (slot: "left" | "right", pokemon: Pokemon) => {
     if (slot === "left") {
       setSelectedLeft(pokemon);
@@ -120,9 +126,41 @@ export default function PokeBattleArena() {
         </div>
 
         {/* Status Footer */}
-        <div className="mt-8 text-center">
-          <Card className="inline-block">
-            {/*  TODO: add "start new game" button */}
+        <div className="mt-8 flex justify-center">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              {!winner && (
+                <CardDescription className="text-base">
+                  {selectedLeft && selectedRight
+                    ? "⚔️ Ready to battle!"
+                    : "Select both fighters to begin"
+                  }
+                </CardDescription>
+              )}
+
+              {winner && (
+                <div className="space-y-2">
+                  <Badge variant="secondary" className="text-lg px-4 py-2">
+                    🏆 Victory!
+                  </Badge>
+                  <CardTitle className="text-2xl">
+                    {(winner === "left" ? selectedLeft?.name : selectedRight?.name)} Wins!
+                  </CardTitle>
+                </div>
+              )}
+            </CardHeader>
+
+            <CardContent className="text-center ">
+              <Button
+                variant={winner ? "default" : "outline"}
+                onClick={handleRestart}
+                className="flex items-center gap-2 w-full sm:w-auto mx-auto"
+                size={winner ? "lg" : "default"}
+              >
+                <Zap className="h-4 w-4" />
+                {winner ? "Start New Battle" : "Reset Arena"}
+              </Button>
+            </CardContent>
           </Card>
         </div>
       </div>

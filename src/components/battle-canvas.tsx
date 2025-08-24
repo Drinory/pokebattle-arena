@@ -45,6 +45,19 @@ type Particle = {
   size: number;
 };
 
+type ConfettiParticle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rotation: number;
+  rotationSpeed: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  size: number;
+};
+
 type AnimationState = {
   animationTime: number;
   attackAnimationTime: number;
@@ -53,6 +66,8 @@ type AnimationState = {
   hoveredBar: string | null;
   mousePos: { x: number; y: number };
   particles: Particle[];
+  confetti: ConfettiParticle[];
+  celebrationStartTime: number | null;
 };
 
 const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
@@ -65,7 +80,9 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       shakeOffset: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } },
       hoveredBar: null,
       mousePos: { x: 0, y: 0 },
-      particles: []
+      particles: [],
+      confetti: [],
+      celebrationStartTime: null
     });
 
     // Refs to store current values for the animation loop without causing re-renders
@@ -263,6 +280,11 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
             if (prev.targetHp.left <= 0 || prev.targetHp.right <= 0) {
               const winner = prev.targetHp.left <= 0 ? "right" : "left";
               onKo?.(winner);
+              
+              // Start celebration confetti
+              animationStateRef.current.celebrationStartTime = performance.now();
+              createCelebrationConfetti();
+              
               return {
                 ...prev,
                 phase: "KO",
@@ -391,6 +413,9 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
         // Update particles
         updateParticles(deltaTime);
+        
+        // Update confetti
+        updateConfetti(deltaTime);
 
         // Get current battle state from ref (always up to date)
         const currentBattleState = battleStateRef.current;
@@ -474,6 +499,45 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       animationStateRef.current.particles.push(...particles);
     }, []);
 
+    // Create celebration confetti for victory
+    const createCelebrationConfetti = useCallback(() => {
+      const confettiColors = ['#ff6b6b', '#ffd93d', '#6bcf7f', '#4ecdc4', '#45b7d1', '#96ceb4', '#a855f7', '#f472b6'];
+      const confetti: ConfettiParticle[] = [];
+      
+      // Create multiple waves of confetti
+      for (let wave = 0; wave < 3; wave++) {
+        setTimeout(() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          
+          const { width } = canvas.getBoundingClientRect();
+          const particleCount = 50 + Math.floor(Math.random() * 30);
+          
+          for (let i = 0; i < particleCount; i++) {
+            const x = Math.random() * width;
+            const vx = (Math.random() - 0.5) * 8;
+            const vy = -Math.random() * 15 - 5; // Upward initial velocity
+            const life = 120 + Math.random() * 80;
+            
+            confetti.push({
+              x,
+              y: -10, // Start above screen
+              vx,
+              vy,
+              rotation: Math.random() * Math.PI * 2,
+              rotationSpeed: (Math.random() - 0.5) * 0.3,
+              life,
+              maxLife: life,
+              color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
+              size: 3 + Math.random() * 5
+            });
+          }
+          
+          animationStateRef.current.confetti.push(...confetti);
+        }, wave * 300); // Delay each wave
+      }
+    }, []);
+
     // Update particle physics
     const updateParticles = useCallback((deltaTime: number) => {
       const particles = animationStateRef.current.particles;
@@ -496,6 +560,35 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         // Remove dead particles
         if (particle.life <= 0) {
           particles.splice(i, 1);
+        }
+      }
+    }, []);
+
+    // Update confetti physics
+    const updateConfetti = useCallback((deltaTime: number) => {
+      const confetti = animationStateRef.current.confetti;
+      
+      for (let i = confetti.length - 1; i >= 0; i--) {
+        const particle = confetti[i];
+        
+        // Update position
+        particle.x += particle.vx * deltaTime * 0.1;
+        particle.y += particle.vy * deltaTime * 0.1;
+        
+        // Update velocity (gravity and air resistance)
+        particle.vy += 0.5 * deltaTime * 0.1; // Gravity
+        particle.vx *= 0.995; // Air resistance
+        particle.vy *= 0.995;
+        
+        // Update rotation
+        particle.rotation += particle.rotationSpeed * deltaTime * 0.1;
+        
+        // Update life
+        particle.life -= deltaTime * 0.1;
+        
+        // Remove dead confetti
+        if (particle.life <= 0) {
+          confetti.splice(i, 1);
         }
       }
     }, []);
@@ -585,6 +678,9 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       // Particles
       drawParticles(ctx, animState.particles);
+      
+      // Confetti (celebration)
+      drawConfetti(ctx, animState.confetti);
 
       // Tooltip (using ref data instead of state)
       if (animState.hoveredBar && (currentLeft || currentRight)) {
@@ -886,21 +982,41 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       ctx.restore();
     };
 
-    const drawParticles = (ctx: CanvasRenderingContext2D, particles: Particle[]) => {
+        const drawParticles = (ctx: CanvasRenderingContext2D, particles: Particle[]) => {
       particles.forEach(particle => {
         const alpha = particle.life / particle.maxLife;
         const size = particle.size * alpha;
-
+        
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.fillStyle = particle.color;
         ctx.shadowBlur = 5;
         ctx.shadowColor = particle.color;
-
+        
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, size, 0, Math.PI * 2);
         ctx.fill();
+        
+        ctx.restore();
+      });
+    };
 
+    const drawConfetti = (ctx: CanvasRenderingContext2D, confetti: ConfettiParticle[]) => {
+      confetti.forEach(particle => {
+        const alpha = particle.life / particle.maxLife;
+        const size = particle.size * alpha;
+        
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(particle.x, particle.y);
+        ctx.rotate(particle.rotation);
+        
+        // Draw confetti as colorful rectangles
+        ctx.fillStyle = particle.color;
+        ctx.shadowBlur = 3;
+        ctx.shadowColor = particle.color;
+        ctx.fillRect(-size/2, -size/2, size, size);
+        
         ctx.restore();
       });
     };
