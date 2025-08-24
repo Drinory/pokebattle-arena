@@ -1,4 +1,4 @@
-// Centralized color theme system for consistent styling across the application
+// Pure color definitions for the application theme
 
 export const colors = {
   // Pokémon type colors - authoritative source
@@ -81,22 +81,3 @@ export const colors = {
     "#96ceb4"   // Mint
   ]
 } as const;
-
-// Helper functions for common color operations
-export const getTypeColor = (type: string): string => {
-  return colors.types[type as keyof typeof colors.types] || colors.types.normal;
-};
-
-export const getHpColor = (hpPercentage: number): string => {
-  if (hpPercentage > 50) return colors.hp.healthy;
-  if (hpPercentage > 25) return colors.hp.warning;
-  return colors.hp.critical;
-};
-
-export const getRandomParticleColor = (): string => {
-  return colors.particles[Math.floor(Math.random() * colors.particles.length)];
-};
-
-// Type definitions for better TypeScript support
-export type PokemonType = keyof typeof colors.types;
-export type ThemeColors = typeof colors;

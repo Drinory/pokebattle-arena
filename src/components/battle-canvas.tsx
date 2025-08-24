@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHand
 import { setupCanvasDPR } from "@/lib/util/dpr";
 import { pointInRect, qbezier, clamp, lerp } from "@/lib/util/math";
 import { playAudio } from "@/lib/util/audio";
-import { colors, getTypeColor, getHpColor, getRandomParticleColor } from "@/lib/theme/colors";
+import { colors, getTypeColor, getHpColor, getRandomParticleColor, getTypeProjectile } from "@/lib/theme";
+import { getTypeEffectiveness } from "@/lib/game";
 import type { Pokemon } from "@/types/pokemon";
 
 export type BattleCanvasProps = {
@@ -213,12 +214,12 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
             if (!currentLeft || !currentRight) return prev;
 
-            const attacker = prev.phase === "ATTACKING_LEFT" ? currentLeft : currentRight;
-            const defender = prev.phase === "ATTACKING_LEFT" ? currentRight : currentLeft;
+            const attacker = prev.currentTurn === "left" ? currentLeft : currentRight;
+            const defender = prev.currentTurn === "left" ? currentRight : currentLeft;
             const damage = calculateDamage(attacker, defender);
 
             const newTargetHp = { ...prev.targetHp };
-            if (prev.phase === "ATTACKING_LEFT") {
+            if (prev.currentTurn === "left") {
               newTargetHp.right = Math.max(0, prev.hpRight - damage);
             } else {
               newTargetHp.left = Math.max(0, prev.hpLeft - damage);
@@ -237,13 +238,13 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
             const { width, height } = canvas.getBoundingClientRect();
             const groundY = height * 0.8;
 
-            if (battleState.phase === "ATTACKING_LEFT") {
+            if (battleState.currentTurn === "left") {
               animationStateRef.current.shakeOffset.right = { x: 5, y: 0 };
-              // Create particles at right Pokemon position
+              // Create particles at right Pokemon position (defender)
               createParticles(width * 0.75, groundY - 80);
             } else {
               animationStateRef.current.shakeOffset.left = { x: -5, y: 0 };
-              // Create particles at left Pokemon position
+              // Create particles at left Pokemon position (defender)
               createParticles(width * 0.25, groundY - 80);
             }
           }
@@ -503,55 +504,14 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
     const calculateDamage = useCallback((attacker: Pokemon, defender: Pokemon): number => {
       const baseAttack = attacker.stats.atk;
       const defense = defender.stats.def;
-      const typeMultiplier = getTypeMultiplier(attacker.typeMain, defender.typeMain);
+      const typeMultiplier = getTypeEffectiveness(attacker.typeMain, defender.typeMain);
 
       const raw = (baseAttack - defense * 0.5) * typeMultiplier;
       const jitter = 0.9 + Math.random() * 0.2;
       return clamp(Math.round(raw * jitter), 5, 40);
     }, []);
 
-    // Type effectiveness - comprehensive matrix for more strategic battles
-    const getTypeMultiplier = (atkType: string, defType: string): number => {
-      const effectiveness: Record<string, Record<string, number>> = {
-        // Fire type
-        fire: { grass: 2.0, ice: 2.0, bug: 2.0, steel: 2.0, water: 0.5, fire: 0.5, rock: 0.5, dragon: 0.5 },
-        // Water type
-        water: { fire: 2.0, ground: 2.0, rock: 2.0, water: 0.5, grass: 0.5, dragon: 0.5 },
-        // Electric type
-        electric: { water: 2.0, flying: 2.0, grass: 0.5, electric: 0.5, dragon: 0.5, ground: 0.0 },
-        // Grass type
-        grass: { water: 2.0, ground: 2.0, rock: 2.0, fire: 0.5, grass: 0.5, poison: 0.5, flying: 0.5, bug: 0.5, dragon: 0.5, steel: 0.5 },
-        // Ice type
-        ice: { grass: 2.0, ground: 2.0, flying: 2.0, dragon: 2.0, fire: 0.5, water: 0.5, ice: 0.5, steel: 0.5 },
-        // Fighting type
-        fighting: { normal: 2.0, ice: 2.0, rock: 2.0, dark: 2.0, steel: 2.0, poison: 0.5, flying: 0.5, psychic: 0.5, bug: 0.5, fairy: 0.5, ghost: 0.0 },
-        // Poison type
-        poison: { grass: 2.0, fairy: 2.0, poison: 0.5, ground: 0.5, rock: 0.5, ghost: 0.5, steel: 0.0 },
-        // Ground type
-        ground: { fire: 2.0, electric: 2.0, poison: 2.0, rock: 2.0, steel: 2.0, grass: 0.5, bug: 0.5, flying: 0.0 },
-        // Flying type
-        flying: { electric: 0.5, ice: 0.5, rock: 0.5, steel: 0.5, grass: 2.0, fighting: 2.0, bug: 2.0 },
-        // Psychic type
-        psychic: { fighting: 2.0, poison: 2.0, psychic: 0.5, steel: 0.5, dark: 0.0 },
-        // Bug type
-        bug: { grass: 2.0, psychic: 2.0, dark: 2.0, fire: 0.5, fighting: 0.5, poison: 0.5, flying: 0.5, ghost: 0.5, steel: 0.5, fairy: 0.5 },
-        // Rock type
-        rock: { fire: 2.0, ice: 2.0, flying: 2.0, bug: 2.0, fighting: 0.5, ground: 0.5, steel: 0.5 },
-        // Ghost type
-        ghost: { psychic: 2.0, ghost: 2.0, dark: 0.5, normal: 0.0 },
-        // Dragon type
-        dragon: { dragon: 2.0, steel: 0.5, fairy: 0.0 },
-        // Dark type
-        dark: { fighting: 0.5, ghost: 0.5, dark: 0.5, psychic: 2.0 },
-        // Steel type
-        steel: { ice: 2.0, rock: 2.0, fairy: 2.0, fire: 0.5, water: 0.5, electric: 0.5, steel: 0.5 },
-        // Fairy type
-        fairy: { fighting: 2.0, dragon: 2.0, dark: 2.0, fire: 0.5, poison: 0.5, steel: 0.5 },
-        // Normal type
-        normal: { rock: 0.5, ghost: 0.0, steel: 0.5 }
-      };
-      return effectiveness[atkType]?.[defType] ?? 1.0;
-    };
+    
 
     const draw = useCallback((ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, time: number) => {
       const { width, height } = canvas.getBoundingClientRect();
@@ -880,22 +840,49 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
     };
 
     const drawProjectile = (ctx: CanvasRenderingContext2D, x: number, y: number, phase: Phase) => {
-      const isLeftAttacking = phase === "ATTACKING_LEFT";
-      const attacker = isLeftAttacking ? left : right;
-      const color = getTypeColor(attacker?.typeMain || "normal");
+      const currentBattleState = battleStateRef.current;
+      const currentLeft = leftPokemonRef.current;
+      const currentRight = rightPokemonRef.current;
+
+      if (!currentBattleState) return;
+
+      // Use the current turn to determine who is attacking (more reliable than phase)
+      const attacker = currentBattleState.currentTurn === "left" ? currentLeft : currentRight;
+      const attackerType = attacker?.typeMain || "normal";
+      const color = getTypeColor(attackerType);
+      const emoji = getTypeProjectile(attackerType);
+
+
 
       ctx.save();
-      ctx.shadowBlur = 10;
+
+      // Draw glowing background circle
+      ctx.shadowBlur = 15;
       ctx.shadowColor = color;
       ctx.fillStyle = color;
+      ctx.globalAlpha = 0.6;
       ctx.beginPath();
-      ctx.arc(x, y, 8, 0, Math.PI * 2);
+      ctx.arc(x, y, 12, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+      // Reset for emoji
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+
+      // Draw type-specific emoji
+      ctx.font = "24px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(emoji, x, y);
+
+      // Add smaller glowing core
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = color;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
       ctx.beginPath();
-      ctx.arc(x - 2, y - 2, 3, 0, Math.PI * 2);
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
       ctx.fill();
+
       ctx.restore();
     };
 
