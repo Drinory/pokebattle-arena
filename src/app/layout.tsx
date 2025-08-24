@@ -13,9 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Senior Full-Stack Developer - Take-Home Exercise",
-  description:
-    "Technical assessment template for senior full-stack developer candidates",
+  title: "PokéBattle Arena",
+  description: "Interactive Pokémon battle visualization using Canvas 2D API",
 };
 
 export default function RootLayout({
