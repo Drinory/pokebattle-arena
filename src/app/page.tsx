@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +13,11 @@ export default function PokeBattleArena() {
   const [selectedLeft, setSelectedLeft] = useState<Pokemon | undefined>();
   const [selectedRight, setSelectedRight] = useState<Pokemon | undefined>();
   const [winner, setWinner] = useState<"left" | "right" | undefined>();
+  const battleCanvasRef = useRef<{ triggerAttack: () => void }>(null);
 
   const handleKo = (winnerSide: "left" | "right") => {
-    setWinner(winnerSide);
+    // HACK: this is a hack to wait for the animation to finish
+    setTimeout(() => setWinner(winnerSide), 1000)
   };
 
   const handlePokemonSelect = (slot: "left" | "right", pokemon: Pokemon) => {
@@ -56,7 +58,7 @@ export default function PokeBattleArena() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <PokemonList 
+              <PokemonList
                 onPick={handlePokemonSelect}
                 selectedLeft={selectedLeft}
                 selectedRight={selectedRight}
@@ -91,10 +93,12 @@ export default function PokeBattleArena() {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!selectedLeft || !selectedRight}
-                  // TODO: Connect to battle logic in Milestone 5
+                  disabled={!selectedLeft || !selectedRight || !!winner}
+                  onClick={() => {
+                    battleCanvasRef.current?.triggerAttack();
+                  }}
                 >
-                  ⚔️ Attack
+                  ⚔️ Attack (or click canvas)
                 </Button>
                 <div className="flex items-center gap-2">
                   <span className="text-sm">
@@ -105,7 +109,8 @@ export default function PokeBattleArena() {
               </div>
 
               {/* Canvas Container */}
-              <BattleCanvas 
+              <BattleCanvas
+                ref={battleCanvasRef}
                 left={selectedLeft}
                 right={selectedRight}
                 onKo={handleKo}
@@ -117,11 +122,7 @@ export default function PokeBattleArena() {
         {/* Status Footer */}
         <div className="mt-8 text-center">
           <Card className="inline-block">
-            <CardContent className="px-6 py-3">
-              <p className="text-sm text-muted-foreground">
-                🎯 <strong>Milestone 3 Complete:</strong> Canvas shell with rAF, DPR scaling, hover tooltips
-              </p>
-            </CardContent>
+            {/*  TODO: add "start new game" button */}
           </Card>
         </div>
       </div>
