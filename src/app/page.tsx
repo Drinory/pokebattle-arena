@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Zap, ArrowLeft, ArrowRight } from "lucide-react";
 import PokemonList from "@/components/pokemon-list";
+import BattleCanvas from "@/components/battle-canvas";
 import type { Pokemon } from "@/types/pokemon";
 
 export default function PokeBattleArena() {
@@ -104,12 +105,11 @@ export default function PokeBattleArena() {
               </div>
 
               {/* Canvas Container */}
-              <div className="rounded-lg border bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-800 dark:to-gray-700 p-4">
-                {/* TODO: BattleCanvas component will go here */}
-                <div className="flex h-[360px] items-center justify-center text-muted-foreground">
-                  Canvas battle visualization will be implemented in Milestone 3...
-                </div>
-              </div>
+              <BattleCanvas 
+                left={selectedLeft}
+                right={selectedRight}
+                onKo={handleKo}
+              />
             </CardContent>
           </Card>
         </div>
@@ -119,7 +119,7 @@ export default function PokeBattleArena() {
           <Card className="inline-block">
             <CardContent className="px-6 py-3">
               <p className="text-sm text-muted-foreground">
-                🎯 <strong>Milestone 2 In Progress:</strong> API integration, Pokemon list, search & pagination
+                🎯 <strong>Milestone 3 Complete:</strong> Canvas shell with rAF, DPR scaling, hover tooltips
               </p>
             </CardContent>
           </Card>
