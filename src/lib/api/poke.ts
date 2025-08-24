@@ -26,8 +26,8 @@ const PokeDetails = z.object({
 });
 
 export async function listPokemon() {
-  // Fetch all Pokemon at once - there are approximately 1000+ Pokemon in the PokeAPI so there is no performance penalty for fetching all at once
-  const r = await fetch(`https://pokeapi.co/api/v2/pokemon`);
+  // Fetch all Pokemon at once - there are approximately 1300 Pokemon in the PokeAPI, so we set limit=2000 to safely get everything without performance penalty
+  const r = await fetch(`https://pokeapi.co/api/v2/pokemon?limit=2000`);
   if (!r.ok) throw new Error(`Failed to fetch Pokemon list: ${r.status}`);
   const j = await r.json();
   return PokeList.parse(j);
