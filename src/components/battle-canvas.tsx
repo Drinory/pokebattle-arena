@@ -627,8 +627,11 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       drawParticles(ctx, animState.particles);
 
       // Tooltip (using ref data instead of state)
-      if (animState.hoveredBar) {
-        drawTooltip(ctx, animState.mousePos.x, animState.mousePos.y, animState.hoveredBar);
+      if (animState.hoveredBar && (currentLeft || currentRight)) {
+        const pokemon = animState.hoveredBar === "left-hp" ? currentLeft : currentRight;
+        if (pokemon) {
+          drawPokemonTooltip(ctx, animState.mousePos.x, animState.mousePos.y, pokemon, getCurrentHP(animState.hoveredBar === "left-hp" ? "left" : "right"));
+        }
       }
 
       // KO Banner
@@ -809,17 +812,88 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       }
     };
 
-    const drawTooltip = (ctx: CanvasRenderingContext2D, x: number, y: number, text: string) => {
-      const padding = 8;
+    const drawPokemonTooltip = (ctx: CanvasRenderingContext2D, x: number, y: number, pokemon: Pokemon, currentHp: number) => {
+      const padding = 12;
+      const lineHeight = 18;
       const fontSize = 12;
+      const titleFontSize = 14;
+      
       ctx.font = `${fontSize}px sans-serif`;
-      const textWidth = ctx.measureText(text).width;
-
-      ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-      ctx.fillRect(x + 10, y - 25, textWidth + padding * 2, fontSize + padding);
-
-      ctx.fillStyle = "white";
-      ctx.fillText(text, x + 10 + padding, y - 10);
+      
+      // Prepare tooltip content
+      const lines = [
+        `${pokemon.name.toUpperCase()}`,
+        `Type: ${pokemon.typeMain}`,
+        `HP: ${Math.round(currentHp)}/100`,
+        ``,
+        `STATS:`,
+        `ATK: ${pokemon.stats.atk}  DEF: ${pokemon.stats.def}`,
+        `SPA: ${pokemon.stats.spa}  SPD: ${pokemon.stats.spd}`,
+        `SPE: ${pokemon.stats.spe}`
+      ];
+      
+      // Calculate tooltip dimensions
+      ctx.font = `bold ${titleFontSize}px sans-serif`;
+      const titleWidth = ctx.measureText(lines[0]).width;
+      ctx.font = `${fontSize}px sans-serif`;
+      
+      const maxWidth = Math.max(
+        titleWidth,
+        ...lines.slice(1).map(line => ctx.measureText(line).width)
+      );
+      
+      const tooltipWidth = maxWidth + padding * 2;
+      const tooltipHeight = lines.length * lineHeight + padding * 2;
+      
+      // Position tooltip to avoid edges
+      const canvas = ctx.canvas;
+      let tooltipX = x + 15;
+      let tooltipY = y - tooltipHeight - 10;
+      
+      // Adjust if tooltip would go off-screen
+      if (tooltipX + tooltipWidth > canvas.width) {
+        tooltipX = x - tooltipWidth - 15;
+      }
+      if (tooltipY < 0) {
+        tooltipY = y + 15;
+      }
+      
+      // Draw tooltip background with border
+      ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
+      ctx.fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
+      
+      ctx.strokeStyle = pokemon.typeMain === "fire" ? "#ef4444" : 
+                       pokemon.typeMain === "water" ? "#3b82f6" :
+                       pokemon.typeMain === "electric" ? "#eab308" :
+                       pokemon.typeMain === "grass" ? "#22c55e" : "#9ca3af";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
+      
+      // Draw content
+      let currentY = tooltipY + padding + lineHeight;
+      
+      lines.forEach((line, index) => {
+        if (index === 0) {
+          // Title
+          ctx.fillStyle = "#ffffff";
+          ctx.font = `bold ${titleFontSize}px sans-serif`;
+        } else if (line === "STATS:") {
+          // Stats header
+          ctx.fillStyle = "#94a3b8";
+          ctx.font = `bold ${fontSize}px sans-serif`;
+        } else if (line === "") {
+          // Skip empty lines but advance Y
+          currentY += lineHeight * 0.5;
+          return;
+        } else {
+          // Regular content
+          ctx.fillStyle = "#e2e8f0";
+          ctx.font = `${fontSize}px sans-serif`;
+        }
+        
+        ctx.fillText(line, tooltipX + padding, currentY);
+        currentY += lineHeight;
+      });
     };
 
     const drawProjectile = (ctx: CanvasRenderingContext2D, x: number, y: number, phase: Phase) => {
