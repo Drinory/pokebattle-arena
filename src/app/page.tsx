@@ -98,7 +98,7 @@ export default function PokeBattleArena() {
                     battleCanvasRef.current?.triggerAttack();
                   }}
                 >
-                  ⚔️ Attack (or click canvas)
+                  ⚔️ Attack
                 </Button>
                 <div className="flex items-center gap-2">
                   <span className="text-sm">
