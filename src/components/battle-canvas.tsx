@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHand
 import { setupCanvasDPR } from "@/lib/util/dpr";
 import { pointInRect, qbezier, clamp, lerp } from "@/lib/util/math";
 import { playAudio } from "@/lib/util/audio";
+import { colors, getTypeColor, getHpColor, getRandomParticleColor } from "@/lib/theme/colors";
 import type { Pokemon } from "@/types/pokemon";
 
 export type BattleCanvasProps = {
@@ -445,9 +446,8 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       };
     }, []); // Empty dependency array for stable animation loop
 
-    // Create particle burst on hit
+        // Create particle burst on hit
     const createParticles = useCallback((x: number, y: number) => {
-      const colors = ['#ff6b6b', '#ffd93d', '#6bcf7f', '#4ecdc4', '#45b7d1', '#96ceb4'];
       const particles: Particle[] = [];
 
       // Create 8-12 particles for impact effect
@@ -465,7 +465,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
           vy: Math.sin(angle) * speed - Math.random() * 2, // Slight upward bias
           life,
           maxLife: life,
-          color: colors[Math.floor(Math.random() * colors.length)],
+          color: getRandomParticleColor(),
           size: 2 + Math.random() * 3
         });
       }
@@ -571,23 +571,23 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       // Background gradient
       const gradient = ctx.createLinearGradient(0, 0, width, height);
-      gradient.addColorStop(0, "#e0f2fe");
-      gradient.addColorStop(1, "#fce7f3");
+      gradient.addColorStop(0, colors.ui.background.canvas.start);
+      gradient.addColorStop(1, colors.ui.background.canvas.end);
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
 
       // Ground line
       const groundY = height * 0.8;
-      ctx.strokeStyle = "#64748b";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(0, groundY);
-      ctx.lineTo(width, groundY);
-      ctx.stroke();
+      // ctx.strokeStyle = colors.ui.border.muted;
+      // ctx.lineWidth = 1;
+      // ctx.beginPath();
+      // ctx.moveTo(0, groundY);
+      // ctx.lineTo(width, groundY);
+      // ctx.stroke();
 
       // Loading indicator
       if (currentBattleState.loadingSprites) {
-        ctx.fillStyle = "#6b7280";
+        ctx.fillStyle = colors.ui.text.secondary;
         ctx.font = `${getResponsiveFontSize(16)}px sans-serif`;
         ctx.textAlign = "center";
         ctx.fillText("Loading sprites...", width / 2, height / 2);
@@ -641,7 +641,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       // Turn indicator
       if (currentBattleState.phase === "IDLE" && currentLeft && currentRight) {
-        ctx.fillStyle = "#3b82f6";
+        ctx.fillStyle = colors.ui.status.info;
         ctx.font = `${getResponsiveFontSize(14)}px sans-serif`;
         ctx.textAlign = "center";
         const turnText = `${currentBattleState.currentTurn === "left" ? currentLeft.name : currentRight.name}'s turn`;
@@ -649,7 +649,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       }
 
       // Phase indicator
-      ctx.fillStyle = "#6b7280";
+      ctx.fillStyle = colors.ui.text.secondary;
       ctx.font = `${getResponsiveFontSize(10)}px monospace`;
       ctx.textAlign = "left";
       ctx.fillText(`Phase: ${currentBattleState.phase}`, 10, 30);
@@ -686,41 +686,27 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       if (spriteImage) {
         drawSpriteAspectFit(ctx, spriteImage, centerX, y - spriteSize/2, spriteSize, spriteSize);
       } else {
-        const typeColors: Record<string, string> = {
-          fire: "#ef4444", water: "#3b82f6", electric: "#eab308", grass: "#22c55e",
-          psychic: "#a855f7", ice: "#06b6d4", dragon: "#8b5cf6", dark: "#374151",
-          fighting: "#dc2626", poison: "#9333ea", ground: "#a3a3a3", flying: "#60a5fa",
-          bug: "#84cc16", rock: "#78716c", ghost: "#6b7280", steel: "#71717a", normal: "#9ca3af"
-        };
-
-        const color = typeColors[pokemon.typeMain] || "#9ca3af";
+        const color = getTypeColor(pokemon.typeMain);
         ctx.fillStyle = color;
         ctx.fillRect(centerX - spriteSize/2, y - spriteSize/2, spriteSize, spriteSize);
-        ctx.strokeStyle = "#374151";
+        ctx.strokeStyle = colors.ui.border.primary;
         ctx.lineWidth = 2;
         ctx.strokeRect(centerX - spriteSize/2, y - spriteSize/2, spriteSize, spriteSize);
       }
 
       // Name
-      ctx.fillStyle = "#1f2937";
+      ctx.fillStyle = colors.ui.text.primary;
       ctx.font = `${getFontSize(14)}px sans-serif`;
       ctx.textAlign = "center";
       ctx.fillText(pokemon.name, centerX, y + spriteSize/2 + 20);
 
       // Type badge
-      const typeColors: Record<string, string> = {
-        fire: "#ef4444", water: "#3b82f6", electric: "#eab308", grass: "#22c55e",
-        psychic: "#a855f7", ice: "#06b6d4", dragon: "#8b5cf6", dark: "#374151",
-        fighting: "#dc2626", poison: "#9333ea", ground: "#a3a3a3", flying: "#60a5fa",
-        bug: "#84cc16", rock: "#78716c", ghost: "#6b7280", steel: "#71717a", normal: "#9ca3af"
-      };
-
-      const color = typeColors[pokemon.typeMain] || "#9ca3af";
+      const color = getTypeColor(pokemon.typeMain);
       ctx.fillStyle = color;
       const badgeWidth = Math.max(40, getFontSize(10) * 4);
       const badgeHeight = Math.max(15, getFontSize(10) + 5);
       ctx.fillRect(centerX - badgeWidth/2, y + spriteSize/2 + 25, badgeWidth, badgeHeight);
-      ctx.fillStyle = "white";
+      ctx.fillStyle = colors.ui.text.inverse;
       ctx.font = `${getFontSize(10)}px sans-serif`;
       ctx.fillText(pokemon.typeMain, centerX, y + spriteSize/2 + 25 + badgeHeight/2 + getFontSize(10)/3);
     };
@@ -755,13 +741,13 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
     };
 
     const drawPlaceholder = (ctx: CanvasRenderingContext2D, text: string, centerX: number, y: number, getFontSize: (size: number) => number) => {
-      ctx.strokeStyle = "#9ca3af";
+      ctx.strokeStyle = colors.ui.border.muted;
       ctx.lineWidth = 2;
       ctx.setLineDash([10, 5]);
       ctx.strokeRect(centerX - 30, y - 30, 60, 60);
       ctx.setLineDash([]);
 
-      ctx.fillStyle = "#6b7280";
+      ctx.fillStyle = colors.ui.text.secondary;
       ctx.font = `${getFontSize(12)}px sans-serif`;
       ctx.textAlign = "center";
       ctx.fillText(text, centerX, y + 50);
@@ -784,21 +770,21 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       const isHovered = animationStateRef.current.hoveredBar === `${side}-hp`;
 
       // Background
-      ctx.fillStyle = "#e5e7eb";
+      ctx.fillStyle = colors.hp.background;
       ctx.fillRect(x, y, barWidth, barHeight);
 
       // HP fill
       const hpWidth = (hp / 100) * barWidth;
-      ctx.fillStyle = hp > 50 ? "#22c55e" : hp > 25 ? "#eab308" : "#ef4444";
+      ctx.fillStyle = getHpColor(hp);
       ctx.fillRect(x, y, hpWidth, barHeight);
 
       // Border
-      ctx.strokeStyle = "#374151";
+      ctx.strokeStyle = colors.ui.border.primary;
       ctx.lineWidth = 1;
       ctx.strokeRect(x, y, barWidth, barHeight);
 
       // Label
-      ctx.fillStyle = "#1f2937";
+      ctx.fillStyle = colors.ui.text.primary;
       const fontSize = Math.max(10, Math.min(12, canvasWidth * 12 / 800));
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textAlign = "left";
@@ -806,7 +792,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       // Hover highlight
       if (isHovered) {
-        ctx.strokeStyle = "#3b82f6";
+        ctx.strokeStyle = colors.ui.border.accent;
         ctx.lineWidth = 2;
         ctx.strokeRect(x - 1, y - 1, barWidth + 2, barHeight + 2);
       }
@@ -817,9 +803,9 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       const lineHeight = 18;
       const fontSize = 12;
       const titleFontSize = 14;
-      
+
       ctx.font = `${fontSize}px sans-serif`;
-      
+
       // Prepare tooltip content
       const lines = [
         `${pokemon.name.toUpperCase()}`,
@@ -831,25 +817,25 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         `SPA: ${pokemon.stats.spa}  SPD: ${pokemon.stats.spd}`,
         `SPE: ${pokemon.stats.spe}`
       ];
-      
+
       // Calculate tooltip dimensions
       ctx.font = `bold ${titleFontSize}px sans-serif`;
       const titleWidth = ctx.measureText(lines[0]).width;
       ctx.font = `${fontSize}px sans-serif`;
-      
+
       const maxWidth = Math.max(
         titleWidth,
         ...lines.slice(1).map(line => ctx.measureText(line).width)
       );
-      
+
       const tooltipWidth = maxWidth + padding * 2;
       const tooltipHeight = lines.length * lineHeight + padding * 2;
-      
+
       // Position tooltip to avoid edges
       const canvas = ctx.canvas;
       let tooltipX = x + 15;
       let tooltipY = y - tooltipHeight - 10;
-      
+
       // Adjust if tooltip would go off-screen
       if (tooltipX + tooltipWidth > canvas.width) {
         tooltipX = x - tooltipWidth - 15;
@@ -857,29 +843,26 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       if (tooltipY < 0) {
         tooltipY = y + 15;
       }
-      
+
       // Draw tooltip background with border
-      ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
+      ctx.fillStyle = colors.ui.background.tooltip;
       ctx.fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
-      
-      ctx.strokeStyle = pokemon.typeMain === "fire" ? "#ef4444" : 
-                       pokemon.typeMain === "water" ? "#3b82f6" :
-                       pokemon.typeMain === "electric" ? "#eab308" :
-                       pokemon.typeMain === "grass" ? "#22c55e" : "#9ca3af";
+
+      ctx.strokeStyle = getTypeColor(pokemon.typeMain);
       ctx.lineWidth = 2;
       ctx.strokeRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
-      
+
       // Draw content
       let currentY = tooltipY + padding + lineHeight;
-      
+
       lines.forEach((line, index) => {
         if (index === 0) {
           // Title
-          ctx.fillStyle = "#ffffff";
+          ctx.fillStyle = colors.ui.text.inverse;
           ctx.font = `bold ${titleFontSize}px sans-serif`;
         } else if (line === "STATS:") {
           // Stats header
-          ctx.fillStyle = "#94a3b8";
+          ctx.fillStyle = colors.ui.text.muted;
           ctx.font = `bold ${fontSize}px sans-serif`;
         } else if (line === "") {
           // Skip empty lines but advance Y
@@ -887,10 +870,10 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
           return;
         } else {
           // Regular content
-          ctx.fillStyle = "#e2e8f0";
+          ctx.fillStyle = colors.ui.text.light;
           ctx.font = `${fontSize}px sans-serif`;
         }
-        
+
         ctx.fillText(line, tooltipX + padding, currentY);
         currentY += lineHeight;
       });
@@ -899,10 +882,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
     const drawProjectile = (ctx: CanvasRenderingContext2D, x: number, y: number, phase: Phase) => {
       const isLeftAttacking = phase === "ATTACKING_LEFT";
       const attacker = isLeftAttacking ? left : right;
-      const typeColors: Record<string, string> = {
-        fire: "#ef4444", water: "#3b82f6", electric: "#eab308", grass: "#22c55e"
-      };
-      const color = typeColors[attacker?.typeMain || "normal"] || "#9ca3af";
+      const color = getTypeColor(attacker?.typeMain || "normal");
 
       ctx.save();
       ctx.shadowBlur = 10;
@@ -938,19 +918,19 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       });
     };
 
-    const drawKoBanner = (ctx: CanvasRenderingContext2D, width: number, height: number, getFontSize: (size: number) => number) => {
+        const drawKoBanner = (ctx: CanvasRenderingContext2D, width: number, height: number, getFontSize: (size: number) => number) => {
       const currentBattleState = battleStateRef.current;
       const currentLeft = leftPokemonRef.current;
       const currentRight = rightPokemonRef.current;
 
-      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillStyle = colors.ui.background.overlay;
       ctx.fillRect(0, 0, width, height);
 
-      ctx.fillStyle = "#ef4444";
+      ctx.fillStyle = colors.ui.status.danger;
       const koFontSize = getFontSize(48);
       ctx.font = `bold ${koFontSize}px sans-serif`;
       ctx.textAlign = "center";
-      ctx.strokeStyle = "white";
+      ctx.strokeStyle = colors.ui.text.inverse;
       ctx.lineWidth = 3;
       ctx.strokeText("K.O.!", width / 2, height / 2);
       ctx.fillText("K.O.!", width / 2, height / 2);
@@ -958,7 +938,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       if (currentBattleState) {
         const winner = currentBattleState.hpLeft <= 0 ? currentRight?.name : currentLeft?.name;
         if (winner) {
-          ctx.fillStyle = "white";
+          ctx.fillStyle = colors.ui.text.inverse;
           ctx.font = `${getFontSize(24)}px sans-serif`;
           ctx.fillText(`${winner} wins!`, width / 2, height / 2 + 60);
         }
