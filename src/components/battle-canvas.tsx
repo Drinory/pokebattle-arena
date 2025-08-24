@@ -267,16 +267,19 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       const y = (e.clientY - rect.top) * dpr;
       const mousePos = { x: x / dpr, y: y / dpr };
 
-      // Check hover for HP bars
+      // Check hover for HP bars with responsive positioning
       let newHoveredBar: string | null = null;
       const currentLeft = leftPokemonRef.current;
       const currentRight = rightPokemonRef.current;
+
+      // Responsive bar width calculation (matches drawHPBar)
+      const maxBarWidth = Math.min(150, rect.width * 0.25);
 
       if (currentLeft) {
         const leftHPBarBounds = {
           x: rect.width * 0.05,
           y: rect.height * 0.2,
-          width: 150,
+          width: maxBarWidth,
           height: 40
         };
         if (pointInRect(mousePos.x, mousePos.y, leftHPBarBounds.x, leftHPBarBounds.y, leftHPBarBounds.width, leftHPBarBounds.height)) {
@@ -286,9 +289,9 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       if (currentRight && !newHoveredBar) {
         const rightHPBarBounds = {
-          x: rect.width * 0.75,
+          x: rect.width - maxBarWidth - (rect.width * 0.05),
           y: rect.height * 0.2,
-          width: 150,
+          width: maxBarWidth,
           height: 40
         };
         if (pointInRect(mousePos.x, mousePos.y, rightHPBarBounds.x, rightHPBarBounds.y, rightHPBarBounds.width, rightHPBarBounds.height)) {
@@ -434,6 +437,10 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       if (!currentBattleState) return;
 
+      // Responsive scaling helper - scales based on canvas width
+      const getResponsiveSize = (baseSize: number) => Math.max(baseSize * 0.6, Math.min(baseSize, width * baseSize / 800));
+      const getResponsiveFontSize = (baseSize: number) => Math.max(baseSize * 0.75, Math.min(baseSize, width * baseSize / 800));
+
       // Clear canvas
       ctx.clearRect(0, 0, width, height);
 
@@ -456,7 +463,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       // Loading indicator
       if (currentBattleState.loadingSprites) {
         ctx.fillStyle = "#6b7280";
-        ctx.font = "16px sans-serif";
+        ctx.font = `${getResponsiveFontSize(16)}px sans-serif`;
         ctx.textAlign = "center";
         ctx.fillText("Loading sprites...", width / 2, height / 2);
       }
@@ -465,20 +472,25 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       if (currentLeft) {
         const leftX = width * 0.25 + animState.shakeOffset.left.x;
         const leftY = groundY - 80 + animState.shakeOffset.left.y;
-        drawPokemonArea(ctx, currentLeft, "left", leftX, leftY, time, currentBattleState.spriteImages.left);
-        drawHPBar(ctx, currentLeft.name, getCurrentHP("left"), width * 0.05, height * 0.2, "left");
+        drawPokemonArea(ctx, currentLeft, "left", leftX, leftY, time, currentBattleState.spriteImages.left, getResponsiveSize(80), getResponsiveFontSize);
+        // Left HP bar positioned from left edge with padding
+        const leftHPBarX = width * 0.05;
+        drawHPBar(ctx, currentLeft.name, getCurrentHP("left"), leftHPBarX, height * 0.2, "left", width);
       } else {
-        drawPlaceholder(ctx, "Choose Left Fighter", width * 0.25, groundY - 40);
+        drawPlaceholder(ctx, "Choose Left Fighter", width * 0.25, groundY - 40, getResponsiveFontSize);
       }
 
       // Right Pokemon area
       if (currentRight) {
         const rightX = width * 0.75 + animState.shakeOffset.right.x;
         const rightY = groundY - 80 + animState.shakeOffset.right.y;
-        drawPokemonArea(ctx, currentRight, "right", rightX, rightY, time, currentBattleState.spriteImages.right);
-        drawHPBar(ctx, currentRight.name, getCurrentHP("right"), width * 0.75, height * 0.2, "right");
+        drawPokemonArea(ctx, currentRight, "right", rightX, rightY, time, currentBattleState.spriteImages.right, getResponsiveSize(80), getResponsiveFontSize);
+        // Right HP bar positioned from right edge to prevent overflow
+        const maxBarWidth = Math.min(150, width * 0.25);
+        const rightHPBarX = width - maxBarWidth - (width * 0.05);
+        drawHPBar(ctx, currentRight.name, getCurrentHP("right"), rightHPBarX, height * 0.2, "right", width);
       } else {
-        drawPlaceholder(ctx, "Choose Right Fighter", width * 0.75, groundY - 40);
+        drawPlaceholder(ctx, "Choose Right Fighter", width * 0.75, groundY - 40, getResponsiveFontSize);
       }
 
       // Projectile
@@ -493,13 +505,13 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       // KO Banner
       if (currentBattleState.phase === "KO") {
-        drawKoBanner(ctx, width, height);
+        drawKoBanner(ctx, width, height, getResponsiveFontSize);
       }
 
       // Turn indicator
       if (currentBattleState.phase === "IDLE" && currentLeft && currentRight) {
         ctx.fillStyle = "#3b82f6";
-        ctx.font = "14px sans-serif";
+        ctx.font = `${getResponsiveFontSize(14)}px sans-serif`;
         ctx.textAlign = "center";
         const turnText = `${currentBattleState.currentTurn === "left" ? currentLeft.name : currentRight.name}'s turn`;
         ctx.fillText(turnText, width / 2, 50);
@@ -507,7 +519,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       // Phase indicator
       ctx.fillStyle = "#6b7280";
-      ctx.font = "10px monospace";
+      ctx.font = `${getResponsiveFontSize(10)}px monospace`;
       ctx.textAlign = "left";
       ctx.fillText(`Phase: ${currentBattleState.phase}`, 10, 30);
     }, []); // Remove all dependencies to make draw function stable
@@ -533,11 +545,12 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       centerX: number,
       baseY: number,
       time: number,
-      spriteImage: HTMLImageElement | null
+      spriteImage: HTMLImageElement | null,
+      spriteSize: number,
+      getFontSize: (size: number) => number
     ) => {
       const bounce = Math.sin(time * 0.002) * 3;
       const y = baseY + bounce;
-      const spriteSize = 80;
 
       if (spriteImage) {
         drawSpriteAspectFit(ctx, spriteImage, centerX, y - spriteSize/2, spriteSize, spriteSize);
@@ -559,7 +572,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       // Name
       ctx.fillStyle = "#1f2937";
-      ctx.font = "14px sans-serif";
+      ctx.font = `${getFontSize(14)}px sans-serif`;
       ctx.textAlign = "center";
       ctx.fillText(pokemon.name, centerX, y + spriteSize/2 + 20);
 
@@ -573,10 +586,12 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       const color = typeColors[pokemon.typeMain] || "#9ca3af";
       ctx.fillStyle = color;
-      ctx.fillRect(centerX - 20, y + spriteSize/2 + 25, 40, 15);
+      const badgeWidth = Math.max(40, getFontSize(10) * 4);
+      const badgeHeight = Math.max(15, getFontSize(10) + 5);
+      ctx.fillRect(centerX - badgeWidth/2, y + spriteSize/2 + 25, badgeWidth, badgeHeight);
       ctx.fillStyle = "white";
-      ctx.font = "10px sans-serif";
-      ctx.fillText(pokemon.typeMain, centerX, y + spriteSize/2 + 35);
+      ctx.font = `${getFontSize(10)}px sans-serif`;
+      ctx.fillText(pokemon.typeMain, centerX, y + spriteSize/2 + 25 + badgeHeight/2 + getFontSize(10)/3);
     };
 
     const drawSpriteAspectFit = (
@@ -608,7 +623,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       ctx.drawImage(image, x, y, drawWidth, drawHeight);
     };
 
-    const drawPlaceholder = (ctx: CanvasRenderingContext2D, text: string, centerX: number, y: number) => {
+    const drawPlaceholder = (ctx: CanvasRenderingContext2D, text: string, centerX: number, y: number, getFontSize: (size: number) => number) => {
       ctx.strokeStyle = "#9ca3af";
       ctx.lineWidth = 2;
       ctx.setLineDash([10, 5]);
@@ -616,7 +631,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       ctx.setLineDash([]);
 
       ctx.fillStyle = "#6b7280";
-      ctx.font = "12px sans-serif";
+      ctx.font = `${getFontSize(12)}px sans-serif`;
       ctx.textAlign = "center";
       ctx.fillText(text, centerX, y + 50);
     };
@@ -627,9 +642,12 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       hp: number,
       x: number,
       y: number,
-      side: "left" | "right"
+      side: "left" | "right",
+      canvasWidth: number
     ) => {
-      const barWidth = 150;
+      // Responsive bar width: max 150px, but scale down on small screens
+      const maxBarWidth = Math.min(150, canvasWidth * 0.25);
+      const barWidth = maxBarWidth;
       const barHeight = 20;
 
       const isHovered = animationStateRef.current.hoveredBar === `${side}-hp`;
@@ -650,7 +668,8 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       // Label
       ctx.fillStyle = "#1f2937";
-      ctx.font = "12px sans-serif";
+      const fontSize = Math.max(10, Math.min(12, canvasWidth * 12 / 800));
+      ctx.font = `${fontSize}px sans-serif`;
       ctx.textAlign = "left";
       ctx.fillText(`${name} HP: ${Math.round(hp)}/100`, x, y - 5);
 
@@ -698,7 +717,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       ctx.restore();
     };
 
-    const drawKoBanner = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    const drawKoBanner = (ctx: CanvasRenderingContext2D, width: number, height: number, getFontSize: (size: number) => number) => {
       const currentBattleState = battleStateRef.current;
       const currentLeft = leftPokemonRef.current;
       const currentRight = rightPokemonRef.current;
@@ -707,7 +726,8 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       ctx.fillRect(0, 0, width, height);
 
       ctx.fillStyle = "#ef4444";
-      ctx.font = "bold 48px sans-serif";
+      const koFontSize = getFontSize(48);
+      ctx.font = `bold ${koFontSize}px sans-serif`;
       ctx.textAlign = "center";
       ctx.strokeStyle = "white";
       ctx.lineWidth = 3;
@@ -718,7 +738,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         const winner = currentBattleState.hpLeft <= 0 ? currentRight?.name : currentLeft?.name;
         if (winner) {
           ctx.fillStyle = "white";
-          ctx.font = "24px sans-serif";
+          ctx.font = `${getFontSize(24)}px sans-serif`;
           ctx.fillText(`${winner} wins!`, width / 2, height / 2 + 60);
         }
       }
@@ -728,7 +748,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       <div className="relative">
         <canvas
           ref={canvasRef}
-          className="w-full h-[360px] rounded-lg border bg-white cursor-crosshair"
+          className="w-full h-[min(360px,50vh)] sm:h-[360px] rounded-lg border bg-white cursor-crosshair"
           onMouseMove={handleMouseMove}
           onClick={handleCanvasClick}
           aria-label={`Battle canvas. ${left?.name || "No left fighter"} vs ${right?.name || "No right fighter"}. Left HP: ${battleState.hpLeft}, Right HP: ${battleState.hpRight}`}

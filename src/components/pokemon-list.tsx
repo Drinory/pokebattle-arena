@@ -38,7 +38,7 @@ export default function PokemonList({ onPick, selectedLeft, selectedRight }: Pok
       try {
         setLoading(true);
         setError(null);
-        
+
         const res = await listPokemon();
         setAllItems(res.results);
         setUseMockMode(false);
@@ -71,7 +71,7 @@ export default function PokemonList({ onPick, selectedLeft, selectedRight }: Pok
   const handleSelectPokemon = async (name: string, slot: "left" | "right") => {
     try {
       setLoadingPokemon(name);
-      
+
       let pokemon: Pokemon;
       if (useMockMode) {
         const mock = mockPokemon.find(p => p.name === name);
@@ -80,7 +80,7 @@ export default function PokemonList({ onPick, selectedLeft, selectedRight }: Pok
       } else {
         pokemon = await getPokemon(name);
       }
-      
+
       onPick(slot, pokemon);
     } catch (err) {
       console.error("Failed to load Pokémon details:", err);
@@ -97,7 +97,11 @@ export default function PokemonList({ onPick, selectedLeft, selectedRight }: Pok
     return (
       <div className="space-y-4">
         <div className="flex gap-2">
-          <Skeleton className="h-10 flex-1" />
+          <Skeleton className="left-3 top-1/2 h-4 h-9 flex-1" />
+        </div>
+        <div className="flex gap-3">
+          <Skeleton className="w-19 h-6" />
+          <Skeleton className="w-19 h-6" />
         </div>
         <div className="grid grid-cols-2 gap-2">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -147,33 +151,47 @@ export default function PokemonList({ onPick, selectedLeft, selectedRight }: Pok
           </AlertDescription>
         </Alert>
       ) : (
-        <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 p-1 gap-2 max-h-[30vh] sm:max-h-[400px] overflow-y-auto">
           {paginatedItems.map((pokemon) => {
             const isSelected = selectedLeft?.name === pokemon.name || selectedRight?.name === pokemon.name;
             const isLoading = loadingPokemon === pokemon.name;
-            
+
             return (
-              <Card key={pokemon.name} className={`${isSelected ? "ring-2 ring-primary" : ""}`}>
-                <CardContent className="p-3">
-                  <div className="text-sm font-medium capitalize mb-2">{pokemon.name}</div>
+              <Card key={pokemon.name} className={`${isSelected ? "ring-1 ring-gray-500 bg-gray-100" : ""}`}>
+                <CardContent className="p-2 sm:p-3">
+                  <div className="text-xs sm:text-sm font-medium capitalize mb-1 sm:mb-2 truncate">{pokemon.name}</div>
                   <div className="flex gap-1">
                     <Button
                       size="sm"
                       variant="outline"
-                      className="flex-1 text-xs"
+                      className="flex-1 text-xs px-1 sm:px-3"
                       disabled={isLoading || selectedLeft?.name === pokemon.name}
                       onClick={() => handleSelectPokemon(pokemon.name, "left")}
                     >
-                      {isLoading ? <Zap className="h-3 w-3 animate-spin" /> : "← Left"}
+                      {isLoading ? (
+                        <Zap className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">← Left</span>
+                          <span className="sm:hidden">L</span>
+                        </>
+                      )}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="flex-1 text-xs"
+                      className="flex-1 text-xs px-1 sm:px-3"
                       disabled={isLoading || selectedRight?.name === pokemon.name}
                       onClick={() => handleSelectPokemon(pokemon.name, "right")}
                     >
-                      {isLoading ? <Zap className="h-3 w-3 animate-spin" /> : "Right →"}
+                      {isLoading ? (
+                        <Zap className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">Right →</span>
+                          <span className="sm:hidden">R</span>
+                        </>
+                      )}
                     </Button>
                   </div>
                 </CardContent>
@@ -185,31 +203,38 @@ export default function PokemonList({ onPick, selectedLeft, selectedRight }: Pok
 
       {/* Pagination */}
       {!useMockMode && totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <div>
-            Showing {currentPage * itemsPerPage + 1}-{Math.min((currentPage + 1) * itemsPerPage, totalItems)} of {totalItems}
-            {searchQuery && ` (filtered from ${allItems.length})`}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs sm:text-sm text-muted-foreground">
+          <div className="text-center sm:text-left">
+            <span className="hidden sm:inline">Showing </span>
+            {currentPage * itemsPerPage + 1}-{Math.min((currentPage + 1) * itemsPerPage, totalItems)} of {totalItems}
+            {searchQuery && (
+              <span className="hidden sm:inline"> (filtered from {allItems.length})</span>
+            )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1 sm:gap-2 justify-center sm:justify-end">
             <Button
               size="sm"
               variant="outline"
               disabled={!canGoPrevious}
               onClick={() => setCurrentPage(currentPage - 1)}
+              className="text-xs"
             >
               <ChevronLeft className="h-4 w-4" />
-              Previous
+              <span className="hidden sm:inline">Previous</span>
+              <span className="sm:hidden">Prev</span>
             </Button>
-            <span className="flex items-center px-2 text-xs">
-              Page {currentPage + 1} of {totalPages}
+            <span className="flex items-center px-1 sm:px-2 text-xs">
+              {currentPage + 1}/{totalPages}
             </span>
             <Button
               size="sm"
               variant="outline"
               disabled={!canGoNext}
               onClick={() => setCurrentPage(currentPage + 1)}
+              className="text-xs"
             >
-              Next
+              <span className="hidden sm:inline">Next</span>
+              <span className="sm:hidden">Next</span>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
