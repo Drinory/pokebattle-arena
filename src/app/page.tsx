@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Zap, ArrowLeft, ArrowRight } from "lucide-react";
+import PokemonList from "@/components/pokemon-list";
 import type { Pokemon } from "@/types/pokemon";
 
 export default function PokeBattleArena() {
@@ -14,6 +15,16 @@ export default function PokeBattleArena() {
 
   const handleKo = (winnerSide: "left" | "right") => {
     setWinner(winnerSide);
+  };
+
+  const handlePokemonSelect = (slot: "left" | "right", pokemon: Pokemon) => {
+    if (slot === "left") {
+      setSelectedLeft(pokemon);
+    } else {
+      setSelectedRight(pokemon);
+    }
+    // Reset winner when new Pokemon are selected
+    setWinner(undefined);
   };
 
   return (
@@ -44,10 +55,11 @@ export default function PokeBattleArena() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* TODO: PokemonList component will go here */}
-              <div className="text-center text-muted-foreground py-8">
-                Pokémon list loading will be implemented in Milestone 2...
-              </div>
+              <PokemonList 
+                onPick={handlePokemonSelect}
+                selectedLeft={selectedLeft}
+                selectedRight={selectedRight}
+              />
             </CardContent>
           </Card>
 
@@ -107,7 +119,7 @@ export default function PokeBattleArena() {
           <Card className="inline-block">
             <CardContent className="px-6 py-3">
               <p className="text-sm text-muted-foreground">
-                🎯 <strong>Milestone 1 Complete:</strong> Basic Auth, shadcn/ui, App structure
+                🎯 <strong>Milestone 2 In Progress:</strong> API integration, Pokemon list, search & pagination
               </p>
             </CardContent>
           </Card>
