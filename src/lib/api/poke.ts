@@ -71,7 +71,9 @@ export async function getPokemon(name: string): Promise<Pokemon> {
   const stats: Partial<Pokemon["stats"]> = {};
   d.stats.forEach(s => {
     const key = mapName(s.stat.name);
-    if (key) (stats as any)[key] = s.base_stat;
+    if (key) {
+      stats[key] = s.base_stat;
+    }
   });
 
   const out: Pokemon = {
