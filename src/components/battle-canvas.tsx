@@ -20,6 +20,12 @@ type BattleState = {
   animationTime: number;
   hoveredBar: string | null;
   mousePos: { x: number; y: number };
+  spritesLoaded: boolean;
+  loadingSprites: boolean;
+  spriteImages: {
+    left: HTMLImageElement | null;
+    right: HTMLImageElement | null;
+  };
 };
 
 export default function BattleCanvas({ left, right, onKo }: BattleCanvasProps) {
@@ -30,18 +36,87 @@ export default function BattleCanvas({ left, right, onKo }: BattleCanvasProps) {
     hpRight: 100,
     animationTime: 0,
     hoveredBar: null,
-    mousePos: { x: 0, y: 0 }
+    mousePos: { x: 0, y: 0 },
+    spritesLoaded: false,
+    loadingSprites: false,
+    spriteImages: {
+      left: null,
+      right: null
+    }
   });
 
-  // Reset HP when Pokemon change
+  // Load sprites when Pokemon change
   useEffect(() => {
     setBattleState(prev => ({
       ...prev,
       hpLeft: left ? 100 : 100,
       hpRight: right ? 100 : 100,
-      phase: "IDLE"
+      phase: "IDLE",
+      spritesLoaded: false,
+      loadingSprites: false,
+      spriteImages: { left: null, right: null }
     }));
+
+    if (left?.spriteUrl || right?.spriteUrl) {
+      loadSprites(left, right);
+    }
   }, [left?.name, right?.name]);
+
+  const loadSprites = async (leftPokemon?: Pokemon, rightPokemon?: Pokemon) => {
+    setBattleState(prev => ({ ...prev, loadingSprites: true }));
+    
+    try {
+      const promises: Promise<HTMLImageElement | null>[] = [];
+      
+      // Load left sprite
+      if (leftPokemon?.spriteUrl) {
+        promises.push(loadImage(leftPokemon.spriteUrl));
+      } else {
+        promises.push(Promise.resolve(null));
+      }
+      
+      // Load right sprite
+      if (rightPokemon?.spriteUrl) {
+        promises.push(loadImage(rightPokemon.spriteUrl));
+      } else {
+        promises.push(Promise.resolve(null));
+      }
+      
+      const [leftImage, rightImage] = await Promise.all(promises);
+      
+      setBattleState(prev => ({
+        ...prev,
+        spritesLoaded: true,
+        loadingSprites: false,
+        spriteImages: {
+          left: leftImage,
+          right: rightImage
+        }
+      }));
+    } catch (error) {
+      console.warn("Failed to load some sprites:", error);
+      setBattleState(prev => ({
+        ...prev,
+        spritesLoaded: true,
+        loadingSprites: false
+      }));
+    }
+  };
+
+  const loadImage = (url: string): Promise<HTMLImageElement | null> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous"; // Handle CORS
+      
+      img.onload = () => resolve(img);
+      img.onerror = () => {
+        console.warn(`Failed to load image: ${url}`);
+        resolve(null);
+      };
+      
+      img.src = url;
+    });
+  };
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current!;
@@ -122,9 +197,17 @@ export default function BattleCanvas({ left, right, onKo }: BattleCanvasProps) {
     ctx.lineTo(width, groundY);
     ctx.stroke();
     
+    // Loading indicator
+    if (battleState.loadingSprites) {
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "16px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Loading sprites...", width / 2, height / 2);
+    }
+    
     // Left Pokemon area
     if (left) {
-      drawPokemonArea(ctx, left, "left", width * 0.25, groundY - 80, time);
+      drawPokemonArea(ctx, left, "left", width * 0.25, groundY - 80, time, battleState.spriteImages.left);
       drawHPBar(ctx, left.name, battleState.hpLeft, width * 0.05, height * 0.1, "left");
     } else {
       drawPlaceholder(ctx, "Choose Left Fighter", width * 0.25, groundY - 40);
@@ -132,7 +215,7 @@ export default function BattleCanvas({ left, right, onKo }: BattleCanvasProps) {
     
     // Right Pokemon area  
     if (right) {
-      drawPokemonArea(ctx, right, "right", width * 0.75, groundY - 80, time);
+      drawPokemonArea(ctx, right, "right", width * 0.75, groundY - 80, time, battleState.spriteImages.right);
       drawHPBar(ctx, right.name, battleState.hpRight, width * 0.55, height * 0.1, "right");
     } else {
       drawPlaceholder(ctx, "Choose Right Fighter", width * 0.75, groundY - 40);
@@ -155,13 +238,59 @@ export default function BattleCanvas({ left, right, onKo }: BattleCanvasProps) {
     side: "left" | "right",
     centerX: number, 
     baseY: number, 
-    time: number
+    time: number,
+    spriteImage: HTMLImageElement | null
   ) => {
     // Idle animation - gentle sine bounce
     const bounce = Math.sin(time * 0.002) * 3;
     const y = baseY + bounce;
     
-    // Placeholder sprite (colored rectangle based on type)
+    const spriteSize = 80; // Target sprite size
+    
+    if (spriteImage) {
+      // Draw actual sprite with aspect-fit scaling
+      drawSpriteAspectFit(ctx, spriteImage, centerX, y - spriteSize/2, spriteSize, spriteSize);
+    } else {
+      // Fallback to colored placeholder
+      const typeColors: Record<string, string> = {
+        fire: "#ef4444",
+        water: "#3b82f6", 
+        electric: "#eab308",
+        grass: "#22c55e",
+        psychic: "#a855f7",
+        ice: "#06b6d4",
+        dragon: "#8b5cf6",
+        dark: "#374151",
+        fighting: "#dc2626",
+        poison: "#9333ea",
+        ground: "#a3a3a3",
+        flying: "#60a5fa",
+        bug: "#84cc16",
+        rock: "#78716c",
+        ghost: "#6b7280",
+        steel: "#71717a",
+        normal: "#9ca3af"
+      };
+      
+      const color = typeColors[pokemon.typeMain] || "#9ca3af";
+      
+      // Pokemon sprite placeholder
+      ctx.fillStyle = color;
+      ctx.fillRect(centerX - spriteSize/2, y - spriteSize/2, spriteSize, spriteSize);
+      
+      // Border
+      ctx.strokeStyle = "#374151";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(centerX - spriteSize/2, y - spriteSize/2, spriteSize, spriteSize);
+    }
+    
+    // Name
+    ctx.fillStyle = "#1f2937";
+    ctx.font = "14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(pokemon.name, centerX, y + spriteSize/2 + 20);
+    
+    // Type badge
     const typeColors: Record<string, string> = {
       fire: "#ef4444",
       water: "#3b82f6", 
@@ -183,28 +312,45 @@ export default function BattleCanvas({ left, right, onKo }: BattleCanvasProps) {
     };
     
     const color = typeColors[pokemon.typeMain] || "#9ca3af";
-    
-    // Pokemon sprite placeholder
     ctx.fillStyle = color;
-    ctx.fillRect(centerX - 30, y - 60, 60, 60);
-    
-    // Border
-    ctx.strokeStyle = "#374151";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(centerX - 30, y - 60, 60, 60);
-    
-    // Name
-    ctx.fillStyle = "#1f2937";
-    ctx.font = "14px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(pokemon.name, centerX, y + 20);
-    
-    // Type badge
-    ctx.fillStyle = color;
-    ctx.fillRect(centerX - 20, y + 25, 40, 15);
+    ctx.fillRect(centerX - 20, y + spriteSize/2 + 25, 40, 15);
     ctx.fillStyle = "white";
     ctx.font = "10px sans-serif";
-    ctx.fillText(pokemon.typeMain, centerX, y + 35);
+    ctx.fillText(pokemon.typeMain, centerX, y + spriteSize/2 + 35);
+  };
+
+  const drawSpriteAspectFit = (
+    ctx: CanvasRenderingContext2D,
+    image: HTMLImageElement,
+    centerX: number,
+    centerY: number,
+    maxWidth: number,
+    maxHeight: number
+  ) => {
+    const imgAspect = image.width / image.height;
+    const containerAspect = maxWidth / maxHeight;
+    
+    let drawWidth, drawHeight;
+    
+    if (imgAspect > containerAspect) {
+      // Image is wider than container
+      drawWidth = maxWidth;
+      drawHeight = maxWidth / imgAspect;
+    } else {
+      // Image is taller than container
+      drawHeight = maxHeight;
+      drawWidth = maxHeight * imgAspect;
+    }
+    
+    // Center the image
+    const x = centerX - drawWidth / 2;
+    const y = centerY - drawHeight / 2;
+    
+    // Enable image smoothing for crisp rendering
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    
+    ctx.drawImage(image, x, y, drawWidth, drawHeight);
   };
 
   const drawPlaceholder = (ctx: CanvasRenderingContext2D, text: string, centerX: number, y: number) => {
