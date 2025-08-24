@@ -21,8 +21,6 @@ type BattleState = {
   phase: Phase;
   hpLeft: number;
   hpRight: number;
-  hoveredBar: string | null;
-  mousePos: { x: number; y: number };
   spritesLoaded: boolean;
   loadingSprites: boolean;
   spriteImages: {
@@ -38,6 +36,8 @@ type AnimationState = {
   attackAnimationTime: number;
   projectilePos: { x: number; y: number } | null;
   shakeOffset: { left: { x: number; y: number }; right: { x: number; y: number } };
+  hoveredBar: string | null;
+  mousePos: { x: number; y: number };
 };
 
 const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
@@ -47,15 +47,20 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       animationTime: 0,
       attackAnimationTime: 0,
       projectilePos: null,
-      shakeOffset: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } }
+      shakeOffset: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } },
+      hoveredBar: null,
+      mousePos: { x: 0, y: 0 }
     });
+    
+    // Refs to store current values for the animation loop without causing re-renders
+    const battleStateRef = useRef<BattleState | null>(null);
+    const leftPokemonRef = useRef<Pokemon | undefined>(left);
+    const rightPokemonRef = useRef<Pokemon | undefined>(right);
 
     const [battleState, setBattleState] = useState<BattleState>({
       phase: "IDLE",
       hpLeft: 100,
       hpRight: 100,
-      hoveredBar: null,
-      mousePos: { x: 0, y: 0 },
       spritesLoaded: false,
       loadingSprites: false,
       spriteImages: {
@@ -66,19 +71,40 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       targetHp: { left: 100, right: 100 }
     });
 
-      // Expose attack function to parent
-  useImperativeHandle(ref, () => ({
-    triggerAttack: () => {
-      if (battleState.phase === "IDLE" && left && right) {
-        setBattleState(prev => ({
-          ...prev,
-          phase: prev.currentTurn === "left" ? "ATTACKING_LEFT" : "ATTACKING_RIGHT"
-        }));
-        animationStateRef.current.attackAnimationTime = 0;
-        animationStateRef.current.projectilePos = null;
+    // Keep refs in sync with current values
+    useEffect(() => {
+      battleStateRef.current = battleState;
+    }, [battleState]);
+
+    useEffect(() => {
+      leftPokemonRef.current = left;
+    }, [left]);
+
+    useEffect(() => {
+      rightPokemonRef.current = right;
+    }, [right]);
+
+    // Expose attack function to parent
+    useImperativeHandle(ref, () => ({
+      triggerAttack: () => {
+        const currentBattleState = battleStateRef.current;
+        const currentLeft = leftPokemonRef.current;
+        const currentRight = rightPokemonRef.current;
+        
+        if (currentBattleState?.phase === "IDLE" && currentLeft && currentRight) {
+          // Batch state update and animation reset for better performance
+          setBattleState(prev => ({
+            ...prev,
+            phase: prev.currentTurn === "left" ? "ATTACKING_LEFT" : "ATTACKING_RIGHT"
+          }));
+          
+          // Reset animation state immediately to avoid frame delays
+          const animState = animationStateRef.current;
+          animState.attackAnimationTime = 0;
+          animState.projectilePos = null;
+        }
       }
-    }
-  }), [battleState.phase, left, right]);
+    }), []); // Remove dependencies to make imperative handle stable
 
       // Load sprites when Pokemon change
   useEffect(() => {
@@ -160,9 +186,14 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         const timer = setTimeout(() => {
           // Transition to HIT_RESOLVE after projectile animation
           setBattleState(prev => {
-            // Calculate damage
-            const attacker = prev.phase === "ATTACKING_LEFT" ? left! : right!;
-            const defender = prev.phase === "ATTACKING_LEFT" ? right! : left!;
+            // Calculate damage using current pokemon refs
+            const currentLeft = leftPokemonRef.current;
+            const currentRight = rightPokemonRef.current;
+            
+            if (!currentLeft || !currentRight) return prev;
+            
+            const attacker = prev.phase === "ATTACKING_LEFT" ? currentLeft : currentRight;
+            const defender = prev.phase === "ATTACKING_LEFT" ? currentRight : currentLeft;
             const damage = calculateDamage(attacker, defender);
 
             const newTargetHp = { ...prev.targetHp };
@@ -190,7 +221,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
         return () => clearTimeout(timer);
       }
-    }, [battleState.phase, left, right]);
+    }, [battleState.phase]); // Remove left, right dependencies
 
     useEffect(() => {
       if (battleState.phase === "HIT_RESOLVE") {
@@ -238,8 +269,10 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
       // Check hover for HP bars
       let newHoveredBar: string | null = null;
+      const currentLeft = leftPokemonRef.current;
+      const currentRight = rightPokemonRef.current;
 
-            if (left) {
+      if (currentLeft) {
         const leftHPBarBounds = {
           x: rect.width * 0.05,
           y: rect.height * 0.2,
@@ -251,7 +284,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         }
       }
 
-      if (right && !newHoveredBar) {
+      if (currentRight && !newHoveredBar) {
         const rightHPBarBounds = {
           x: rect.width * 0.75,
           y: rect.height * 0.2,
@@ -263,29 +296,36 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         }
       }
 
-      setBattleState(prev => ({
-        ...prev,
-        mousePos,
-        hoveredBar: newHoveredBar
-      }));
-    }, [left, right]);
+      // Update animation state ref instead of React state to avoid re-renders
+      animationStateRef.current.mousePos = mousePos;
+      animationStateRef.current.hoveredBar = newHoveredBar;
+    }, []); // Remove dependencies to make mouse handling stable
 
-      const handleCanvasClick = useCallback(() => {
-    if (battleState.phase === "IDLE" && left && right) {
-      setBattleState(prev => ({
-        ...prev,
-        phase: prev.currentTurn === "left" ? "ATTACKING_LEFT" : "ATTACKING_RIGHT"
-      }));
-      animationStateRef.current.attackAnimationTime = 0;
-      animationStateRef.current.projectilePos = null;
-    }
-  }, [battleState.phase, left, right]);
+    const handleCanvasClick = useCallback(() => {
+      const currentBattleState = battleStateRef.current;
+      const currentLeft = leftPokemonRef.current;
+      const currentRight = rightPokemonRef.current;
+      
+      if (currentBattleState?.phase === "IDLE" && currentLeft && currentRight) {
+        // Batch state update and animation reset for better performance
+        setBattleState(prev => ({
+          ...prev,
+          phase: prev.currentTurn === "left" ? "ATTACKING_LEFT" : "ATTACKING_RIGHT"
+        }));
+        
+        // Reset animation state immediately to avoid frame delays
+        const animState = animationStateRef.current;
+        animState.attackAnimationTime = 0;
+        animState.projectilePos = null;
+      }
+    }, []); // Remove dependencies to make click handling stable
 
-    // Animation loop - only handles drawing and time-based animations
+    // Stable animation loop - minimal dependencies to prevent restarts
     useEffect(() => {
-      const canvas = canvasRef.current!;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
       const ctx = canvas.getContext("2d")!;
-
       let animationId = 0;
       let running = true;
 
@@ -308,16 +348,20 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         // Update animation timers
         animationStateRef.current.animationTime += deltaTime;
 
+        // Get current battle state from ref (always up to date)
+        const currentBattleState = battleStateRef.current;
+        if (!currentBattleState) return;
+
         // Update projectile position during attack
-        if (battleState.phase === "ATTACKING_LEFT" || battleState.phase === "ATTACKING_RIGHT") {
+        if (currentBattleState.phase === "ATTACKING_LEFT" || currentBattleState.phase === "ATTACKING_RIGHT") {
           animationStateRef.current.attackAnimationTime += deltaTime;
           const projectileDuration = 600;
           const progress = Math.min(animationStateRef.current.attackAnimationTime / projectileDuration, 1);
 
           if (progress < 1) {
             const { width } = canvas.getBoundingClientRect();
-            const startX = battleState.phase === "ATTACKING_LEFT" ? width * 0.25 : width * 0.75;
-            const endX = battleState.phase === "ATTACKING_LEFT" ? width * 0.75 : width * 0.25;
+            const startX = currentBattleState.phase === "ATTACKING_LEFT" ? width * 0.25 : width * 0.75;
+            const endX = currentBattleState.phase === "ATTACKING_LEFT" ? width * 0.75 : width * 0.25;
             const midX = (startX + endX) / 2;
             const y = canvas.getBoundingClientRect().height * 0.5;
 
@@ -333,12 +377,12 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         }
 
         // Update shake animation during hit resolve
-        if (battleState.phase === "HIT_RESOLVE") {
+        if (currentBattleState.phase === "HIT_RESOLVE") {
           animationStateRef.current.attackAnimationTime += deltaTime;
           const shakeProgress = Math.min(animationStateRef.current.attackAnimationTime / 250, 1);
           const shakeDecay = Math.pow(1 - shakeProgress, 2);
 
-          if (battleState.currentTurn === "left") {
+          if (currentBattleState.currentTurn === "left") {
             animationStateRef.current.shakeOffset.right.x = 5 * shakeDecay * Math.sin(animationStateRef.current.attackAnimationTime * 0.1);
           } else {
             animationStateRef.current.shakeOffset.left.x = -5 * shakeDecay * Math.sin(animationStateRef.current.attackAnimationTime * 0.1);
@@ -357,7 +401,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         cancelAnimationFrame(animationId);
         resizeObserver.disconnect();
       };
-    }, [battleState.phase, battleState.currentTurn, left, right, battleState.spriteImages]);
+    }, []); // Empty dependency array for stable animation loop
 
     // Damage calculation
     const calculateDamage = useCallback((attacker: Pokemon, defender: Pokemon): number => {
@@ -383,6 +427,12 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
     const draw = useCallback((ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, time: number) => {
       const { width, height } = canvas.getBoundingClientRect();
+      const currentBattleState = battleStateRef.current; // Get current state from ref
+      const currentLeft = leftPokemonRef.current;
+      const currentRight = rightPokemonRef.current;
+      const animState = animationStateRef.current;
+
+      if (!currentBattleState) return;
 
       // Clear canvas
       ctx.clearRect(0, 0, width, height);
@@ -404,7 +454,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       ctx.stroke();
 
       // Loading indicator
-      if (battleState.loadingSprites) {
+      if (currentBattleState.loadingSprites) {
         ctx.fillStyle = "#6b7280";
         ctx.font = "16px sans-serif";
         ctx.textAlign = "center";
@@ -412,46 +462,46 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       }
 
       // Left Pokemon area
-      if (left) {
-        const leftX = width * 0.25 + animationStateRef.current.shakeOffset.left.x;
-        const leftY = groundY - 80 + animationStateRef.current.shakeOffset.left.y;
-        drawPokemonArea(ctx, left, "left", leftX, leftY, time, battleState.spriteImages.left);
-        drawHPBar(ctx, left.name, getCurrentHP("left"), width * 0.05, height * 0.2, "left");
+      if (currentLeft) {
+        const leftX = width * 0.25 + animState.shakeOffset.left.x;
+        const leftY = groundY - 80 + animState.shakeOffset.left.y;
+        drawPokemonArea(ctx, currentLeft, "left", leftX, leftY, time, currentBattleState.spriteImages.left);
+        drawHPBar(ctx, currentLeft.name, getCurrentHP("left"), width * 0.05, height * 0.2, "left");
       } else {
         drawPlaceholder(ctx, "Choose Left Fighter", width * 0.25, groundY - 40);
       }
 
       // Right Pokemon area
-      if (right) {
-        const rightX = width * 0.75 + animationStateRef.current.shakeOffset.right.x;
-        const rightY = groundY - 80 + animationStateRef.current.shakeOffset.right.y;
-        drawPokemonArea(ctx, right, "right", rightX, rightY, time, battleState.spriteImages.right);
-        drawHPBar(ctx, right.name, getCurrentHP("right"), width * 0.75, height * 0.2, "right");
+      if (currentRight) {
+        const rightX = width * 0.75 + animState.shakeOffset.right.x;
+        const rightY = groundY - 80 + animState.shakeOffset.right.y;
+        drawPokemonArea(ctx, currentRight, "right", rightX, rightY, time, currentBattleState.spriteImages.right);
+        drawHPBar(ctx, currentRight.name, getCurrentHP("right"), width * 0.75, height * 0.2, "right");
       } else {
         drawPlaceholder(ctx, "Choose Right Fighter", width * 0.75, groundY - 40);
       }
 
       // Projectile
-      if (animationStateRef.current.projectilePos) {
-        drawProjectile(ctx, animationStateRef.current.projectilePos.x, animationStateRef.current.projectilePos.y, battleState.phase);
+      if (animState.projectilePos) {
+        drawProjectile(ctx, animState.projectilePos.x, animState.projectilePos.y, currentBattleState.phase);
       }
 
-      // Tooltip
-      if (battleState.hoveredBar) {
-        drawTooltip(ctx, battleState.mousePos.x, battleState.mousePos.y, battleState.hoveredBar);
+      // Tooltip (using ref data instead of state)
+      if (animState.hoveredBar) {
+        drawTooltip(ctx, animState.mousePos.x, animState.mousePos.y, animState.hoveredBar);
       }
 
       // KO Banner
-      if (battleState.phase === "KO") {
+      if (currentBattleState.phase === "KO") {
         drawKoBanner(ctx, width, height);
       }
 
       // Turn indicator
-      if (battleState.phase === "IDLE" && left && right) {
+      if (currentBattleState.phase === "IDLE" && currentLeft && currentRight) {
         ctx.fillStyle = "#3b82f6";
         ctx.font = "14px sans-serif";
         ctx.textAlign = "center";
-        const turnText = `${battleState.currentTurn === "left" ? left.name : right.name}'s turn`;
+        const turnText = `${currentBattleState.currentTurn === "left" ? currentLeft.name : currentRight.name}'s turn`;
         ctx.fillText(turnText, width / 2, 50);
       }
 
@@ -459,18 +509,21 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       ctx.fillStyle = "#6b7280";
       ctx.font = "10px monospace";
       ctx.textAlign = "left";
-      ctx.fillText(`Phase: ${battleState.phase}`, 10, 30);
-    }, [battleState.phase, battleState.currentTurn, left, right, battleState.spriteImages, battleState.hpLeft, battleState.hpRight, battleState.targetHp, battleState.hoveredBar]);
+      ctx.fillText(`Phase: ${currentBattleState.phase}`, 10, 30);
+    }, []); // Remove all dependencies to make draw function stable
 
     // Get current HP with tweening during hit resolve
     const getCurrentHP = (side: "left" | "right"): number => {
-      if (battleState.phase === "HIT_RESOLVE") {
+      const currentBattleState = battleStateRef.current;
+      if (!currentBattleState) return 100;
+      
+      if (currentBattleState.phase === "HIT_RESOLVE") {
         const progress = Math.max(0, (animationStateRef.current.attackAnimationTime - 250) / 300);
-        const currentHp = side === "left" ? battleState.hpLeft : battleState.hpRight;
-        const targetHp = battleState.targetHp[side];
+        const currentHp = side === "left" ? currentBattleState.hpLeft : currentBattleState.hpRight;
+        const targetHp = currentBattleState.targetHp[side];
         return lerp(currentHp, targetHp, Math.min(progress, 1));
       }
-      return side === "left" ? battleState.hpLeft : battleState.hpRight;
+      return side === "left" ? currentBattleState.hpLeft : currentBattleState.hpRight;
     };
 
     const drawPokemonArea = (
@@ -579,7 +632,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       const barWidth = 150;
       const barHeight = 20;
 
-      const isHovered = battleState.hoveredBar === `${side}-hp`;
+      const isHovered = animationStateRef.current.hoveredBar === `${side}-hp`;
 
       // Background
       ctx.fillStyle = "#e5e7eb";
@@ -646,6 +699,10 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
     };
 
     const drawKoBanner = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+      const currentBattleState = battleStateRef.current;
+      const currentLeft = leftPokemonRef.current;
+      const currentRight = rightPokemonRef.current;
+      
       ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
       ctx.fillRect(0, 0, width, height);
 
@@ -657,11 +714,13 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       ctx.strokeText("K.O.!", width / 2, height / 2);
       ctx.fillText("K.O.!", width / 2, height / 2);
 
-      const winner = battleState.hpLeft <= 0 ? right?.name : left?.name;
-      if (winner) {
-        ctx.fillStyle = "white";
-        ctx.font = "24px sans-serif";
-        ctx.fillText(`${winner} wins!`, width / 2, height / 2 + 60);
+      if (currentBattleState) {
+        const winner = currentBattleState.hpLeft <= 0 ? currentRight?.name : currentLeft?.name;
+        if (winner) {
+          ctx.fillStyle = "white";
+          ctx.font = "24px sans-serif";
+          ctx.fillText(`${winner} wins!`, width / 2, height / 2 + 60);
+        }
       }
     };
 
