@@ -22,7 +22,11 @@ const PokeDetails = z.object({
   stats: z.array(z.object({
     base_stat: z.number(),
     stat: z.object({ name: z.string() })
-  }))
+  })),
+  cries: z.object({
+    latest: z.string().nullable(),
+    legacy: z.string().nullable()
+  }).optional()
 });
 
 export async function listPokemon() {
@@ -80,6 +84,7 @@ export async function getPokemon(name: string): Promise<Pokemon> {
     name: d.name,
     spriteUrl: d.sprites.front_default,
     typeMain: d.types[0]?.type.name ?? "normal",
+    cryUrl: d.cries?.latest || d.cries?.legacy || null,
     stats: {
       hp: stats.hp ?? 50, 
       atk: stats.atk ?? 50, 
@@ -99,18 +104,21 @@ export const mockPokemon: Pokemon[] = [
     name: "charizard",
     spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png",
     typeMain: "fire",
+    cryUrl: "https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/6.ogg",
     stats: { hp: 78, atk: 84, def: 78, spa: 109, spd: 85, spe: 100 }
   },
   {
     name: "pikachu", 
     spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png",
     typeMain: "electric",
+    cryUrl: "https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/25.ogg",
     stats: { hp: 35, atk: 55, def: 40, spa: 50, spd: 50, spe: 90 }
   },
   {
     name: "blastoise",
     spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/9.png", 
     typeMain: "water",
+    cryUrl: "https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/9.ogg",
     stats: { hp: 79, atk: 83, def: 100, spa: 85, spd: 105, spe: 78 }
   }
 ];

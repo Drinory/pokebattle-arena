@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import { setupCanvasDPR } from "@/lib/util/dpr";
 import { pointInRect, qbezier, clamp, lerp } from "@/lib/util/math";
+import { playAudio } from "@/lib/util/audio";
 import type { Pokemon } from "@/types/pokemon";
 
 export type BattleCanvasProps = {
@@ -31,6 +32,17 @@ type BattleState = {
   targetHp: { left: number; right: number };
 };
 
+type Particle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  size: number;
+};
+
 type AnimationState = {
   animationTime: number;
   attackAnimationTime: number;
@@ -38,6 +50,7 @@ type AnimationState = {
   shakeOffset: { left: { x: number; y: number }; right: { x: number; y: number } };
   hoveredBar: string | null;
   mousePos: { x: number; y: number };
+  particles: Particle[];
 };
 
 const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
@@ -49,9 +62,10 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       projectilePos: null,
       shakeOffset: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } },
       hoveredBar: null,
-      mousePos: { x: 0, y: 0 }
+      mousePos: { x: 0, y: 0 },
+      particles: []
     });
-    
+
     // Refs to store current values for the animation loop without causing re-renders
     const battleStateRef = useRef<BattleState | null>(null);
     const leftPokemonRef = useRef<Pokemon | undefined>(left);
@@ -90,14 +104,20 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         const currentBattleState = battleStateRef.current;
         const currentLeft = leftPokemonRef.current;
         const currentRight = rightPokemonRef.current;
-        
+
         if (currentBattleState?.phase === "IDLE" && currentLeft && currentRight) {
+          // Play attacker's cry
+          const attacker = currentBattleState.currentTurn === "left" ? currentLeft : currentRight;
+          if (attacker.cryUrl) {
+            playAudio(attacker.cryUrl, 0.4);
+          }
+
           // Batch state update and animation reset for better performance
           setBattleState(prev => ({
             ...prev,
             phase: prev.currentTurn === "left" ? "ATTACKING_LEFT" : "ATTACKING_RIGHT"
           }));
-          
+
           // Reset animation state immediately to avoid frame delays
           const animState = animationStateRef.current;
           animState.attackAnimationTime = 0;
@@ -189,9 +209,9 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
             // Calculate damage using current pokemon refs
             const currentLeft = leftPokemonRef.current;
             const currentRight = rightPokemonRef.current;
-            
+
             if (!currentLeft || !currentRight) return prev;
-            
+
             const attacker = prev.phase === "ATTACKING_LEFT" ? currentLeft : currentRight;
             const defender = prev.phase === "ATTACKING_LEFT" ? currentRight : currentLeft;
             const damage = calculateDamage(attacker, defender);
@@ -210,11 +230,21 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
             };
           });
 
-          // Start shake animation
-          if (battleState.phase === "ATTACKING_LEFT") {
-            animationStateRef.current.shakeOffset.right = { x: 5, y: 0 };
-          } else {
-            animationStateRef.current.shakeOffset.left = { x: -5, y: 0 };
+          // Start shake animation and particle burst
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const { width, height } = canvas.getBoundingClientRect();
+            const groundY = height * 0.8;
+
+            if (battleState.phase === "ATTACKING_LEFT") {
+              animationStateRef.current.shakeOffset.right = { x: 5, y: 0 };
+              // Create particles at right Pokemon position
+              createParticles(width * 0.75, groundY - 80);
+            } else {
+              animationStateRef.current.shakeOffset.left = { x: -5, y: 0 };
+              // Create particles at left Pokemon position
+              createParticles(width * 0.25, groundY - 80);
+            }
           }
           animationStateRef.current.attackAnimationTime = 0;
         }, 600); // Projectile duration
@@ -308,14 +338,20 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       const currentBattleState = battleStateRef.current;
       const currentLeft = leftPokemonRef.current;
       const currentRight = rightPokemonRef.current;
-      
+
       if (currentBattleState?.phase === "IDLE" && currentLeft && currentRight) {
+        // Play attacker's cry
+        const attacker = currentBattleState.currentTurn === "left" ? currentLeft : currentRight;
+        if (attacker.cryUrl) {
+          playAudio(attacker.cryUrl, 0.4);
+        }
+
         // Batch state update and animation reset for better performance
         setBattleState(prev => ({
           ...prev,
           phase: prev.currentTurn === "left" ? "ATTACKING_LEFT" : "ATTACKING_RIGHT"
         }));
-        
+
         // Reset animation state immediately to avoid frame delays
         const animState = animationStateRef.current;
         animState.attackAnimationTime = 0;
@@ -327,7 +363,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
     useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      
+
       const ctx = canvas.getContext("2d")!;
       let animationId = 0;
       let running = true;
@@ -350,6 +386,9 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
 
         // Update animation timers
         animationStateRef.current.animationTime += deltaTime;
+
+        // Update particles
+        updateParticles(deltaTime);
 
         // Get current battle state from ref (always up to date)
         const currentBattleState = battleStateRef.current;
@@ -406,6 +445,60 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       };
     }, []); // Empty dependency array for stable animation loop
 
+    // Create particle burst on hit
+    const createParticles = useCallback((x: number, y: number) => {
+      const colors = ['#ff6b6b', '#ffd93d', '#6bcf7f', '#4ecdc4', '#45b7d1', '#96ceb4'];
+      const particles: Particle[] = [];
+
+      // Create 8-12 particles for impact effect
+      const particleCount = 8 + Math.floor(Math.random() * 5);
+
+      for (let i = 0; i < particleCount; i++) {
+        const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.5;
+        const speed = 2 + Math.random() * 3;
+        const life = 40 + Math.random() * 20;
+
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - Math.random() * 2, // Slight upward bias
+          life,
+          maxLife: life,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          size: 2 + Math.random() * 3
+        });
+      }
+
+      animationStateRef.current.particles.push(...particles);
+    }, []);
+
+    // Update particle physics
+    const updateParticles = useCallback((deltaTime: number) => {
+      const particles = animationStateRef.current.particles;
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const particle = particles[i];
+
+        // Update position
+        particle.x += particle.vx * deltaTime * 0.1;
+        particle.y += particle.vy * deltaTime * 0.1;
+
+        // Update velocity (gravity and friction)
+        particle.vy += 0.2 * deltaTime * 0.1; // Gravity
+        particle.vx *= 0.98; // Friction
+        particle.vy *= 0.98;
+
+        // Update life
+        particle.life -= deltaTime * 0.1;
+
+        // Remove dead particles
+        if (particle.life <= 0) {
+          particles.splice(i, 1);
+        }
+      }
+    }, []);
+
     // Damage calculation
     const calculateDamage = useCallback((attacker: Pokemon, defender: Pokemon): number => {
       const baseAttack = attacker.stats.atk;
@@ -417,13 +510,45 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       return clamp(Math.round(raw * jitter), 5, 40);
     }, []);
 
-    // Type effectiveness
+    // Type effectiveness - comprehensive matrix for more strategic battles
     const getTypeMultiplier = (atkType: string, defType: string): number => {
       const effectiveness: Record<string, Record<string, number>> = {
-        fire: { grass: 1.5, water: 0.5 },
-        water: { fire: 1.5, electric: 0.5 },
-        electric: { water: 1.5, grass: 0.5 },
-        grass: { water: 1.5, fire: 0.5 }
+        // Fire type
+        fire: { grass: 2.0, ice: 2.0, bug: 2.0, steel: 2.0, water: 0.5, fire: 0.5, rock: 0.5, dragon: 0.5 },
+        // Water type
+        water: { fire: 2.0, ground: 2.0, rock: 2.0, water: 0.5, grass: 0.5, dragon: 0.5 },
+        // Electric type
+        electric: { water: 2.0, flying: 2.0, grass: 0.5, electric: 0.5, dragon: 0.5, ground: 0.0 },
+        // Grass type
+        grass: { water: 2.0, ground: 2.0, rock: 2.0, fire: 0.5, grass: 0.5, poison: 0.5, flying: 0.5, bug: 0.5, dragon: 0.5, steel: 0.5 },
+        // Ice type
+        ice: { grass: 2.0, ground: 2.0, flying: 2.0, dragon: 2.0, fire: 0.5, water: 0.5, ice: 0.5, steel: 0.5 },
+        // Fighting type
+        fighting: { normal: 2.0, ice: 2.0, rock: 2.0, dark: 2.0, steel: 2.0, poison: 0.5, flying: 0.5, psychic: 0.5, bug: 0.5, fairy: 0.5, ghost: 0.0 },
+        // Poison type
+        poison: { grass: 2.0, fairy: 2.0, poison: 0.5, ground: 0.5, rock: 0.5, ghost: 0.5, steel: 0.0 },
+        // Ground type
+        ground: { fire: 2.0, electric: 2.0, poison: 2.0, rock: 2.0, steel: 2.0, grass: 0.5, bug: 0.5, flying: 0.0 },
+        // Flying type
+        flying: { electric: 0.5, ice: 0.5, rock: 0.5, steel: 0.5, grass: 2.0, fighting: 2.0, bug: 2.0 },
+        // Psychic type
+        psychic: { fighting: 2.0, poison: 2.0, psychic: 0.5, steel: 0.5, dark: 0.0 },
+        // Bug type
+        bug: { grass: 2.0, psychic: 2.0, dark: 2.0, fire: 0.5, fighting: 0.5, poison: 0.5, flying: 0.5, ghost: 0.5, steel: 0.5, fairy: 0.5 },
+        // Rock type
+        rock: { fire: 2.0, ice: 2.0, flying: 2.0, bug: 2.0, fighting: 0.5, ground: 0.5, steel: 0.5 },
+        // Ghost type
+        ghost: { psychic: 2.0, ghost: 2.0, dark: 0.5, normal: 0.0 },
+        // Dragon type
+        dragon: { dragon: 2.0, steel: 0.5, fairy: 0.0 },
+        // Dark type
+        dark: { fighting: 0.5, ghost: 0.5, dark: 0.5, psychic: 2.0 },
+        // Steel type
+        steel: { ice: 2.0, rock: 2.0, fairy: 2.0, fire: 0.5, water: 0.5, electric: 0.5, steel: 0.5 },
+        // Fairy type
+        fairy: { fighting: 2.0, dragon: 2.0, dark: 2.0, fire: 0.5, poison: 0.5, steel: 0.5 },
+        // Normal type
+        normal: { rock: 0.5, ghost: 0.0, steel: 0.5 }
       };
       return effectiveness[atkType]?.[defType] ?? 1.0;
     };
@@ -498,6 +623,9 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
         drawProjectile(ctx, animState.projectilePos.x, animState.projectilePos.y, currentBattleState.phase);
       }
 
+      // Particles
+      drawParticles(ctx, animState.particles);
+
       // Tooltip (using ref data instead of state)
       if (animState.hoveredBar) {
         drawTooltip(ctx, animState.mousePos.x, animState.mousePos.y, animState.hoveredBar);
@@ -528,7 +656,7 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
     const getCurrentHP = (side: "left" | "right"): number => {
       const currentBattleState = battleStateRef.current;
       if (!currentBattleState) return 100;
-      
+
       if (currentBattleState.phase === "HIT_RESOLVE") {
         const progress = Math.max(0, (animationStateRef.current.attackAnimationTime - 250) / 300);
         const currentHp = side === "left" ? currentBattleState.hpLeft : currentBattleState.hpRight;
@@ -717,11 +845,30 @@ const BattleCanvas = forwardRef<BattleCanvasRef, BattleCanvasProps>(
       ctx.restore();
     };
 
+    const drawParticles = (ctx: CanvasRenderingContext2D, particles: Particle[]) => {
+      particles.forEach(particle => {
+        const alpha = particle.life / particle.maxLife;
+        const size = particle.size * alpha;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = particle.color;
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = particle.color;
+
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, size, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      });
+    };
+
     const drawKoBanner = (ctx: CanvasRenderingContext2D, width: number, height: number, getFontSize: (size: number) => number) => {
       const currentBattleState = battleStateRef.current;
       const currentLeft = leftPokemonRef.current;
       const currentRight = rightPokemonRef.current;
-      
+
       ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
       ctx.fillRect(0, 0, width, height);
 
